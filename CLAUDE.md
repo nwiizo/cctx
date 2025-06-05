@@ -1,29 +1,29 @@
-# CLAUDE.md - cctx Project Documentation
+# 🔄 CLAUDE.md - cctx Project Documentation
 
-## Project Overview
+## 📋 Project Overview
 
-`cctx` (Claude Context) is a command-line tool for managing multiple Claude Code `settings.json` configurations.
+**cctx** (Claude Context) is a fast, secure, and intuitive command-line tool for managing multiple Claude Code `settings.json` configurations. Built with Rust for maximum performance and reliability.
 
-## Architecture
+## 🏗️ Architecture
 
-### Core Concept
-- **Context**: A saved Claude Code configuration stored as a JSON file
-- **Current Context**: The active configuration (`~/.claude/settings.json`)
-- **Context Storage**: All contexts are stored in `~/.claude/settings/` as individual JSON files
-- **State Management**: Current and previous context tracked in `~/.claude/settings/.cctx-state.json`
+### 🎯 Core Concept
+- **🔧 Context**: A saved Claude Code configuration stored as a JSON file
+- **⚡ Current Context**: The active configuration (`~/.claude/settings.json`)
+- **📁 Context Storage**: All contexts are stored in `~/.claude/settings/` as individual JSON files
+- **📊 State Management**: Current and previous context tracked in `~/.claude/settings/.cctx-state.json`
 
-### File Structure
+### 📁 File Structure
 ```
-~/.claude/
-├── settings.json           # Current active context (managed by cctx)
-└── settings/
-    ├── work.json          # Work context
-    ├── personal.json      # Personal context
-    ├── project-alpha.json # Project-specific context
-    └── .cctx-state.json   # Hidden state file (tracks current/previous)
+📁 ~/.claude/
+├── ⚙️ settings.json           # Current active context (managed by cctx)
+└── 📁 settings/
+    ├── 💼 work.json          # Work context
+    ├── 🏠 personal.json      # Personal context
+    ├── 🚀 project-alpha.json # Project-specific context
+    └── 🔒 .cctx-state.json   # Hidden state file (tracks current/previous)
 ```
 
-### Key Design Decisions
+### 🎯 Key Design Decisions
 1. **File-based contexts**: Each context is a separate JSON file, making manual management possible
 2. **Simple naming**: Filename (without .json) = context name
 3. **Atomic operations**: Context switching is done by copying files
@@ -72,6 +72,142 @@
 2. **Built-in fuzzy finder**: Fallback when fzf not available
 3. **Color coding**: Current context highlighted in green
 
+## Release Management
+
+### Automated Release System
+
+The project includes a comprehensive release automation system with multiple tools:
+
+#### 1. **release.sh** - Primary Release Script ⭐
+
+A generic, feature-rich release script that can be used for any Rust project:
+
+```bash
+# Release new versions
+./release.sh patch          # 0.1.0 -> 0.1.1
+./release.sh minor          # 0.1.0 -> 0.2.0  
+./release.sh major          # 0.1.0 -> 1.0.0
+
+# Check release status
+./release.sh status         # Check current version
+./release.sh status 0.1.0   # Check specific version
+./release.sh list           # List recent releases
+
+# Options
+./release.sh --dry-run patch      # Preview changes
+./release.sh --skip-crates minor  # Skip crates.io publishing
+```
+
+**Features:**
+- ✅ Auto-detects crate name and GitHub repo from project
+- ✅ Comprehensive pre-flight checks (format, clippy, tests)
+- ✅ Version bumping with validation
+- ✅ Git tagging and GitHub release creation
+- ✅ Crates.io publishing with confirmation
+- ✅ CI/CD status monitoring
+- ✅ Release status checking across all platforms
+- ✅ Dry-run mode for safe testing
+- ✅ Configurable via environment variables
+
+**Configuration:**
+```bash
+# Override defaults if needed
+export CRATE_NAME="custom-name"
+export GITHUB_REPO="owner/repo"
+export CARGO_TOML="path/to/Cargo.toml"
+./release.sh patch
+```
+
+#### 2. **GitHub Actions Workflows**
+
+**CI Pipeline** (`.github/workflows/ci.yml`):
+- Multi-platform testing (Ubuntu, macOS, Windows)
+- Rust stable and beta versions
+- Format checking (`cargo fmt`)
+- Linting (`cargo clippy`)
+- Security audit (`cargo audit`)
+- MSRV (Minimum Supported Rust Version) testing
+
+**Release Pipeline** (`.github/workflows/release.yml`):
+- Triggered by version tags (v*.*.*)
+- Cross-platform binary builds
+- Automatic GitHub Release creation
+- Asset uploads with release notes
+
+#### 3. **Alternative Release Tools**
+
+**cargo-release** (`release-cargo.sh`):
+```bash
+./release-cargo.sh patch    # Simple one-command release
+```
+
+**release-plz** (`.github/workflows/release-plz.yml`):
+- Automatic version detection from commit messages
+- PR-based release workflow
+
+**justfile** (Task runner):
+```bash
+just release-patch         # Release with pre-checks
+just dry-run-minor         # Test release process
+just check                 # Run all quality checks
+```
+
+### Release Process Workflow
+
+1. **Development Phase:**
+   ```bash
+   # During development
+   just check                    # Run all checks
+   cargo clippy --fix           # Fix issues
+   cargo fmt                    # Format code
+   ```
+
+2. **Pre-Release Validation:**
+   ```bash
+   # Test release process
+   ./release.sh --dry-run patch
+   ./release.sh status          # Check current state
+   ```
+
+3. **Release Execution:**
+   ```bash
+   # Actual release
+   ./release.sh patch           # Interactive with confirmations
+   ```
+
+4. **Post-Release Verification:**
+   ```bash
+   # Verify deployment
+   ./release.sh status 0.1.1    # Check specific version
+   ./release.sh list            # View recent releases
+   ```
+
+### Quality Gates
+
+All releases must pass:
+- ✅ `cargo fmt --check` (code formatting)
+- ✅ `cargo clippy -- -D warnings` (linting)
+- ✅ `cargo test` (unit tests)
+- ✅ `cargo build --release` (release build)
+- ✅ `cargo audit` (security vulnerabilities)
+- ✅ Working directory clean (no uncommitted changes)
+
+### Versioning Strategy
+
+Following [Semantic Versioning](https://semver.org/):
+- **Patch** (0.1.0 → 0.1.1): Bug fixes, minor improvements
+- **Minor** (0.1.0 → 0.2.0): New features, backward compatible
+- **Major** (0.1.0 → 1.0.0): Breaking changes
+
+### CI/CD Configuration
+
+**GitHub Actions Secrets:**
+- `CARGO_REGISTRY_TOKEN`: Required for crates.io publishing
+
+**Environment Variables:**
+- `RUST_VERSION`: "1.75" (MSRV)
+- `CARGO_TERM_COLOR`: "always"
+
 ## Development Guidelines
 
 ### Before Making Changes
@@ -85,6 +221,12 @@
 2. **Run existing tests** (if any):
    ```bash
    cargo test
+   ```
+
+3. **Use development tools**:
+   ```bash
+   just setup                   # Setup dev environment
+   just check                   # Run all checks
    ```
 
 ### Making Changes
@@ -163,16 +305,43 @@ When testing changes, verify:
    - Handle missing files gracefully
    - Use atomic operations where possible
 
-## Release Checklist
+## Release Tools Summary
 
-Before releasing a new version:
+| Tool | Use Case | Command | Automation Level |
+|------|----------|---------|------------------|
+| **release.sh** | Primary release tool | `./release.sh patch` | Semi-automated with checks |
+| release-cargo.sh | Simple releases | `./release-cargo.sh patch` | Fully automated |
+| justfile | Development tasks | `just release-patch` | Task-based |
+| release-plz | Git-flow releases | Automatic on PR merge | Fully automated |
+| Manual | Emergency/custom | `cargo publish` | Manual |
 
-1. Update version in `Cargo.toml`
-2. Run full test suite
-3. Test on macOS, Linux, and Windows (WSL)
-4. Update README if needed
-5. Check for any deprecation warnings
-6. Ensure all dependencies are up to date
+### Recommended Workflow
+
+For most releases, use the primary **release.sh** script:
+
+1. **Development** → `just check` (validate changes)
+2. **Pre-release** → `./release.sh --dry-run patch` (test)
+3. **Release** → `./release.sh patch` (execute)
+4. **Verify** → `./release.sh status` (confirm deployment)
+
+## Release Checklist (Automated)
+
+The release.sh script automatically handles:
+
+- ✅ Version validation and bumping in `Cargo.toml`
+- ✅ Code formatting (`cargo fmt --check`)
+- ✅ Linting (`cargo clippy -- -D warnings`)
+- ✅ Test execution (`cargo test`)
+- ✅ Release build (`cargo build --release`)
+- ✅ Git tagging and commit creation
+- ✅ GitHub push and release creation
+- ✅ CI/CD monitoring and status checking
+- ✅ Crates.io publishing with confirmation
+- ✅ Cross-platform deployment verification
+
+Manual steps (if needed):
+- Update README for major changes
+- Update documentation for new features
 
 ## Notes for AI Assistants
 

@@ -1,247 +1,394 @@
-# cctx - Claude Context Switcher
+# 🔄 cctx - Claude Context Switcher
 
-A fast way to switch between Claude Code contexts (`~/.claude/settings.json`).
+> ⚡ **Fast and intuitive** way to switch between Claude Code contexts (`~/.claude/settings.json`)
 
-## Installation
+[![Crates.io](https://img.shields.io/crates/v/cctx)](https://crates.io/crates/cctx)
+[![CI](https://github.com/nwiizo/cctx/workflows/CI/badge.svg)](https://github.com/nwiizo/cctx/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 
+**cctx** (Claude Context) is a kubectx-inspired command-line tool for managing multiple Claude Code configurations. Switch between different permission sets, environments, and settings with a single command.
+
+## ✨ Features
+
+- 🔀 **Instant context switching** - Switch between configurations in milliseconds
+- 🎯 **Interactive selection** - Built-in fuzzy finder with fzf integration
+- 🛡️ **Security-first** - Separate permissions for work, personal, and project contexts
+- 🎨 **Beautiful CLI** - Colorized output with clear status indicators  
+- 🚀 **Shell completions** - Tab completion for all major shells
+- 📦 **Zero dependencies** - Single binary, works everywhere
+- 🔄 **Previous context** - Quick switch back with `cctx -`
+- 📁 **File-based** - Simple JSON files you can edit manually
+- 🎭 **Kubectx-inspired** - Familiar UX for Kubernetes users
+
+## 🚀 Quick Start
+
+### 📦 Installation
+
+**From crates.io (recommended):**
 ```bash
 cargo install cctx
 ```
 
-Or build from source:
-
+**From source:**
 ```bash
 git clone https://github.com/nwiizo/cctx.git
 cd cctx
-cargo build --release
-sudo cp target/release/cctx /usr/local/bin/
+cargo install --path .
 ```
 
-### Shell Completions
+**Pre-built binaries:**
+Download from [GitHub Releases](https://github.com/nwiizo/cctx/releases)
 
-Generate and install shell completions for better usability:
+### ⚡ 30-Second Setup
+
+```bash
+# 1. Create your first context from current settings
+cctx -n personal
+
+# 2. Create a restricted work context
+cctx -n work
+
+# 3. Switch between contexts
+cctx work      # Switch to work
+cctx personal  # Switch to personal  
+cctx -         # Switch back to previous
+```
+
+## 🎯 Usage
+
+### 🔍 Basic Commands
+
+```bash
+# List all contexts (current highlighted in green)
+cctx
+
+# Switch to a context
+cctx work
+
+# Switch to previous context  
+cctx -
+
+# Show current context
+cctx -c
+```
+
+### 🛠️ Context Management
+
+```bash
+# Create new context from current settings
+cctx -n project-alpha
+
+# Delete a context
+cctx -d old-project
+
+# Rename a context
+cctx -r old-name new-name
+
+# Edit context with $EDITOR
+cctx -e work
+
+# Show context content (JSON)
+cctx -s production
+
+# Unset current context
+cctx -u
+```
+
+### 📥📤 Import/Export
+
+```bash
+# Export context to file
+cctx --export production > prod-settings.json
+
+# Import context from file
+cctx --import staging < staging-settings.json
+
+# Share contexts between machines
+cctx --export work | ssh remote-host 'cctx --import work'
+```
+
+### 🖥️ Shell Completions
+
+Enable tab completion for faster workflow:
 
 ```bash
 # Bash
 cctx --completions bash > ~/.local/share/bash-completion/completions/cctx
 
-# Zsh (add to your ~/.zshrc)
+# Zsh  
 cctx --completions zsh > /usr/local/share/zsh/site-functions/_cctx
 
 # Fish
 cctx --completions fish > ~/.config/fish/completions/cctx.fish
 
-# PowerShell (add to your profile)
+# PowerShell
 cctx --completions powershell > cctx.ps1
 ```
 
-## Quick Setup
+## 🏗️ File Structure
 
-After installation, you can quickly set up your contexts using Claude Code:
+Contexts are stored as individual JSON files:
 
-```bash
-# Create your current settings as a 'private' context (full permissions)
-cctx -n private
-
-# Create a restricted 'work' context for safer collaboration
-claude --model opus <<'EOF'
-Create a work.json context file at ~/.claude/settings/work.json with the following restricted permissions:
-- Basic development tools: git, npm, yarn, cargo, python
-- File operations: ls, cat, grep, find, mkdir, touch, cp, mv, rm
-- Read/Edit/Write only in ~/work/** and current directory (./**)
-- Deny: docker, kubectl, terraform, ssh, WebFetch, WebSearch, sudo commands
-- Environment: shorter timeouts, /bin/bash shell
-- Copy the structure from my current ~/.claude/settings.json but with these restrictions
-EOF
-
-# Switch to work context for safer operations
-cctx work
-
-# Switch back to private when you need full access
-cctx private
+```
+📁 ~/.claude/
+├── ⚙️ settings.json           # Current active context (managed by cctx)
+└── 📁 settings/
+    ├── 💼 work.json          # Work context  
+    ├── 🏠 personal.json      # Personal context
+    ├── 🚀 project-alpha.json # Project-specific context
+    └── 🔒 .cctx-state.json   # Hidden state file (tracks current/previous)
 ```
 
-## Usage
+## 🎭 Interactive Mode
 
-```bash
-# List all contexts (current context is highlighted)
-cctx
+When no arguments are provided, cctx enters interactive mode:
 
-# Show only current context (quiet mode)
-cctx -q
-
-# Switch to a context
-cctx my-context
-
-# Switch to previous context
-cctx -
-
-# Create a new context from current settings
-cctx -n my-new-context
-
-# Delete a context
-cctx -d unwanted-context
-
-# Rename a context
-cctx -r old-name
-
-# Show current context name
-cctx -c
-
-# Edit context with $EDITOR
-cctx -e [context-name]
-
-# Show context content
-cctx -s [context-name]
-
-# Unset current context (remove ~/.claude/settings.json)
-cctx -u
-
-# Generate shell completions
-cctx --completions bash|zsh|fish|powershell
-```
-
-## Interactive Mode
-
-If you have `fzf` installed, `cctx` will use it for interactive selection. Otherwise, it uses a built-in fuzzy finder.
+- 🔍 **fzf integration** - Uses fzf if available for fuzzy search
+- 🎯 **Built-in finder** - Fallback fuzzy finder when fzf not installed
+- 🌈 **Color coding** - Current context highlighted in green
+- ⌨️ **Keyboard navigation** - Arrow keys and type-ahead search
 
 ```bash
 # Interactive context selection
 cctx
 ```
 
-## File Structure
+## 💼 Common Workflows
 
-Contexts are stored as individual JSON files in `~/.claude/settings/`:
-
-```
-~/.claude/
-├── settings.json           # Current active context (managed by cctx)
-└── settings/
-    ├── work.json          # Work context
-    ├── personal.json      # Personal context
-    ├── project-alpha.json # Project-specific context
-    └── .cctx-state.json   # cctx state (current/previous context)
-```
-
-You can also manually create or edit context files in `~/.claude/settings/` and cctx will recognize them.
-
-## Common Workflows
-
-### Setting up contexts with Claude
-
-Use Claude Code to help create specialized contexts:
+### 🏢 Professional Setup
 
 ```bash
-# Create a secure context for production work
-claude --model opus <<'EOF'
-Help me create a production.json context file with these requirements:
-- Read-only access to most files
-- No docker/kubectl access
-- No system file editing
-- Limited bash commands for safety
-- Based on my current ~/.claude/settings.json
-EOF
-
-# Create a testing context with specific tool access
-claude --model opus <<'EOF'
-Create a testing.json context that allows:
-- All testing frameworks (jest, vitest, pytest, cargo test)
-- CI/CD tools but no deployment commands
-- File editing in test directories only
-- No production system access
-EOF
+# Create restricted work context for safer collaboration
+cctx -n work
+cctx -e work  # Edit to add restrictions:
+# - Read/Edit only in ~/work/** and current directory
+# - Deny: docker, kubectl, terraform, ssh, WebFetch, WebSearch
+# - Basic dev tools: git, npm, cargo, python only
 ```
 
-### Daily workflow
+### 🚀 Project-Based Contexts
 
 ```bash
-# Morning: switch to work context for safer operations
+# Create project-specific contexts
+cctx -n client-alpha    # For client work
+cctx -n side-project    # For personal projects  
+cctx -n experiments     # For trying new things
+
+# Switch based on current work
+cctx client-alpha       # Restricted permissions
+cctx experiments        # Full permissions for exploration
+```
+
+### 🔄 Daily Context Switching
+
+```bash
+# Morning: start with work context
 cctx work
 
-# Need full access for personal project
+# Need full access for personal project  
 cctx personal
 
 # Quick switch back to work
 cctx -
 
-# Check what context you're in
+# Check current context anytime
 cctx -c
 ```
 
-## Examples
-
-### Quick context switching
+### 🛡️ Security-First Approach
 
 ```bash
-# Working on different projects
+# Default restricted context for screen sharing
 cctx work
-# ... do work stuff ...
+
+# Full permissions only when needed
 cctx personal
-# ... work on personal project ...
-cctx -  # back to work
+
+# Project-specific minimal permissions
+cctx -n client-project
+# Configure: only access to ~/projects/client/** 
 ```
 
-### Creating project-specific contexts
+## 🔧 Advanced Usage
+
+### 📝 Context Creation with Claude
+
+Use Claude Code to help create specialized contexts:
 
 ```bash
-# Set up your Claude settings for a project
-# ... configure permissions, env vars, etc ...
-
-# Save as a context
-cctx -n project-alpha
-
-# Later, switch back to it
-cctx project-alpha
+# Create production-safe context
+claude --model opus <<'EOF'
+Create a production.json context file with these restrictions:
+- Read-only access to most files
+- No docker/kubectl/terraform access  
+- No system file editing
+- Limited bash commands for safety
+- Based on my current ~/.claude/settings.json but secured
+EOF
 ```
 
-### Managing contexts
+### 🎨 Custom Context Templates
 
 ```bash
-# See all contexts
-cctx
-
-# Edit work context settings
-cctx -e work
-
-# Check what's in a context
-cctx -s production
-
-# Clean up old contexts
-cctx -d old-project
+# Create template contexts for different scenarios
+cctx -n template-minimal     # Minimal permissions
+cctx -n template-dev         # Development tools only
+cctx -n template-ops         # Operations/deployment tools
+cctx -n template-restricted  # Screen-sharing safe
 ```
 
-## Import/Export
+### 🔄 Context Synchronization
 
 ```bash
-# Export a context
-cctx --export production > prod-settings.json
+# Sync contexts across machines
+rsync -av ~/.claude/settings/ remote:~/.claude/settings/
 
-# Import a context
-cctx --import staging < staging-settings.json
+# Or use git for version control
+cd ~/.claude/settings
+git init && git add . && git commit -m "Initial contexts"
+git remote add origin git@github.com:user/claude-contexts.git
+git push -u origin main
 ```
 
-## Tips
+## 🛡️ Security Best Practices
 
-- Set `EDITOR` environment variable to use your preferred editor with `-e`
-- Context names can be anything except `-`, `.`, `..`, or contain `/`
-- You can manually copy JSON files to `~/.claude/settings/` to add contexts
-- The state file (`.cctx-state.json`) tracks current and previous contexts
-- Use Claude Code to generate specialized contexts based on your needs
-- Always test new contexts in a safe environment before using in production
+### 🔒 Permission Isolation
 
-## Security Best Practices
+1. **🏢 Work context** - Restricted permissions for professional use
+2. **🏠 Personal context** - Full permissions for personal projects
+3. **📺 Demo context** - Ultra-restricted for screen sharing/demos
+4. **🧪 Testing context** - Isolated environment for experiments
 
-1. **Use restricted contexts for collaborative work** - Switch to `work` context when sharing screens or working with others
-2. **Separate personal and professional contexts** - Keep different permission sets for different types of work
-3. **Regular context audits** - Use `cctx -s <context>` to review permissions periodically
-4. **Project-specific contexts** - Create minimal permission contexts for specific projects
+### 🎯 Context Strategy
 
-## Integration with Claude Code
+```bash
+# Create permission hierarchy
+cctx -n restricted   # No file write, no network, no system access
+cctx -n development  # File access to ~/dev/**, basic tools only  
+cctx -n full        # All permissions for personal use
+cctx -n demo        # Read-only, safe for presentations
+```
 
-cctx is designed to work seamlessly with Claude Code. You can:
+### 🔍 Regular Audits
 
-- Use Claude to generate context configurations
-- Ask Claude to help optimize your permission settings
-- Get Claude to create project-specific contexts based on your needs
-- Use Claude to audit and improve your context security
+```bash
+# Review context permissions regularly
+cctx -s work        # Check work context permissions
+cctx -s personal    # Review personal context
+cctx -s production  # Audit production context
+
+# Quick security check
+cctx -s restricted | grep -i "allow\|deny"
+```
+
+## 🎯 Tips & Tricks
+
+### ⚡ Productivity Boosters
+
+- 🔄 **Use `cctx -` frequently** - Quick toggle between two contexts
+- 🎨 **Color-code your terminals** - Different colors for different contexts
+- ⌨️ **Set up aliases** - `alias work='cctx work'`, `alias home='cctx personal'`
+- 📝 **Document your contexts** - Add comments in JSON for future reference
+
+### 🛠️ Environment Setup
+
+```bash
+# Add to your shell profile (~/.bashrc, ~/.zshrc)
+export EDITOR=code                    # For cctx -e
+alias cx='cctx'                      # Shorter command
+alias cxs='cctx -s'                  # Show context content
+alias cxc='cctx -c'                  # Show current context
+
+# Git hooks for automatic context switching
+# Pre-commit hook to ensure proper context
+#!/bin/bash
+if [[ $(cctx -c) != "work" ]]; then
+  echo "⚠️  Switching to work context for this repo"
+  cctx work
+fi
+```
+
+### 🔧 Integration Examples
+
+```bash
+# Tmux integration - show context in status bar
+set -g status-right "Context: #(cctx -c) | %H:%M"
+
+# VS Code integration - add to settings.json
+"terminal.integrated.env.osx": {
+  "CLAUDE_CONTEXT": "$(cctx -c 2>/dev/null || echo 'none')"
+}
+
+# Fish shell prompt integration
+function fish_prompt
+    set_color cyan
+    echo -n (cctx -c 2>/dev/null || echo 'no-context')
+    set_color normal
+    echo -n '> '
+end
+```
+
+## 🔧 Development & Release Tools
+
+This project includes comprehensive automation tools:
+
+### 🚀 Release Management
+
+```bash
+# Check release status
+./release.sh status
+
+# List recent releases  
+./release.sh list
+
+# Create new release
+./release.sh patch      # 0.1.0 -> 0.1.1
+./release.sh minor      # 0.1.0 -> 0.2.0
+./release.sh major      # 0.1.0 -> 1.0.0
+
+# Test release process
+./release.sh --dry-run patch
+```
+
+### 🛠️ Development Tasks
+
+```bash
+# Using justfile (install: cargo install just)
+just check              # Run all quality checks
+just release-patch      # Release patch version
+just setup              # Setup development environment
+just audit              # Security audit
+just completions fish   # Generate shell completions
+```
+
+## 🤝 Contributing
+
+We welcome contributions! This project includes:
+
+- 🔄 **Automated CI/CD** - GitHub Actions for testing and releases
+- 🧪 **Quality gates** - Formatting, linting, and tests required
+- 📦 **Multi-platform** - Builds for Linux, macOS, and Windows
+- 🚀 **Auto-releases** - Semantic versioning with automated publishing
+
+See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- 🎯 Inspired by [kubectx](https://github.com/ahmetb/kubectx) - the amazing Kubernetes context switcher
+- 🤖 Built for [Claude Code](https://claude.ai/code) - Anthropic's CLI for Claude
+- 🦀 Powered by [Rust](https://www.rust-lang.org/) - fast, safe, and beautiful
+
+---
+
+<div align="center">
+
+**⭐ Star this repo if cctx makes your Claude Code workflow better!**
+
+[🐛 Report Bug](https://github.com/nwiizo/cctx/issues) • [💡 Request Feature](https://github.com/nwiizo/cctx/issues) • [💬 Discussions](https://github.com/nwiizo/cctx/discussions)
+
+</div>
