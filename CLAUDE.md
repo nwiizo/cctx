@@ -150,9 +150,10 @@ export CARGO_TOML="path/to/Cargo.toml"
 ./release-cargo.sh patch    # Simple one-command release
 ```
 
-**release-plz** (`.github/workflows/release-plz.yml`):
-- Automatic version detection from commit messages
-- PR-based release workflow
+**release-plz** (削除済み):
+- GitHub ActionsのデフォルトGITHUB_TOKENではPR作成権限がないため削除
+- 代替案: GitHub App tokenまたはPersonal Access Token (PAT)を使用
+- 現在は`quick-release.sh`スクリプトで同等の機能を提供
 
 **justfile** (Task runner):
 ```bash

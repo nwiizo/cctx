@@ -405,20 +405,25 @@ This project includes comprehensive automation tools:
 
 ### 🚀 Release Management
 
+**Quick Release (Recommended):**
 ```bash
-# Check release status
-./release.sh status
+# One-command release with all checks
+./quick-release.sh patch      # 0.1.0 -> 0.1.1
+./quick-release.sh minor      # 0.1.0 -> 0.2.0
+./quick-release.sh major      # 0.1.0 -> 1.0.0
+```
 
-# List recent releases  
-./release.sh list
+**Alternative Methods:**
+```bash
+# Using release.sh script
+./release.sh status           # Check release status
+./release.sh list            # List recent releases
+./release.sh --dry-run patch # Test release process
 
-# Create new release
-./release.sh patch      # 0.1.0 -> 0.1.1
-./release.sh minor      # 0.1.0 -> 0.2.0
-./release.sh major      # 0.1.0 -> 1.0.0
-
-# Test release process
-./release.sh --dry-run patch
+# Manual version bump (triggers auto-release)
+# 1. Update version in Cargo.toml
+# 2. Commit and push to main
+# 3. GitHub Actions automatically creates tag and release
 ```
 
 ### 🛠️ Development Tasks
