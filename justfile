@@ -32,29 +32,17 @@ clean:
 # Release patch version (e.g., 0.1.0 -> 0.1.1)
 release-patch: check
     @echo "Releasing patch version..."
-    ./release.sh patch
+    ./quick-release.sh patch
 
 # Release minor version (e.g., 0.1.0 -> 0.2.0)
 release-minor: check
     @echo "Releasing minor version..."
-    ./release.sh minor
+    ./quick-release.sh minor
 
 # Release major version (e.g., 0.1.0 -> 1.0.0)
 release-major: check
     @echo "Releasing major version..."
-    ./release.sh major
-
-# Dry run for patch release
-dry-run-patch:
-    ./release.sh --dry-run patch
-
-# Dry run for minor release
-dry-run-minor:
-    ./release.sh --dry-run minor
-
-# Dry run for major release
-dry-run-major:
-    ./release.sh --dry-run major
+    ./quick-release.sh major
 
 # Install cctx locally
 install:

@@ -81,142 +81,102 @@
 4. **Helpful hints**: Shows available project/local contexts when at user level
 5. **Visual indicators**: Emojis for different context levels (👤 User, 📁 Project, 💻 Local)
 
-## Release Management
+## 🚀 Release Management
 
-### Automated Release System
+### Simplified Release System
 
-The project includes a comprehensive release automation system with multiple tools:
+The project uses a streamlined release process with one primary tool:
 
-#### 1. **release.sh** - Primary Release Script ⭐
+#### **quick-release.sh** - Primary Release Script
 
-A generic, feature-rich release script that can be used for any Rust project:
+A simple, reliable release script that handles the entire release process:
 
 ```bash
-# Release new versions
-./release.sh patch          # 0.1.0 -> 0.1.1
-./release.sh minor          # 0.1.0 -> 0.2.0  
-./release.sh major          # 0.1.0 -> 1.0.0
-
-# Check release status
-./release.sh status         # Check current version
-./release.sh status 0.1.0   # Check specific version
-./release.sh list           # List recent releases
-
-# Options
-./release.sh --dry-run patch      # Preview changes
-./release.sh --skip-crates minor  # Skip crates.io publishing
+# One-command release
+./quick-release.sh patch      # 0.1.0 -> 0.1.1
+./quick-release.sh minor      # 0.1.0 -> 0.2.0  
+./quick-release.sh major      # 0.1.0 -> 1.0.0
 ```
 
-**Features:**
-- ✅ Auto-detects crate name and GitHub repo from project
-- ✅ Comprehensive pre-flight checks (format, clippy, tests)
-- ✅ Version bumping with validation
-- ✅ Git tagging and GitHub release creation
-- ✅ Crates.io publishing with confirmation
-- ✅ CI/CD status monitoring
-- ✅ Release status checking across all platforms
-- ✅ Dry-run mode for safe testing
-- ✅ Configurable via environment variables
+**What it does:**
+1. ✅ Validates git state (clean working tree, on main branch)
+2. ✅ Runs quality checks (fmt, clippy, test, build)
+3. ✅ Updates version in Cargo.toml
+4. ✅ Creates git commit and tag
+5. ✅ Pushes to GitHub
+6. ✅ Triggers GitHub Actions for:
+   - Building release binaries for all platforms
+   - Creating GitHub release with artifacts
+   - Publishing to crates.io
 
-**Configuration:**
-```bash
-# Override defaults if needed
-export CRATE_NAME="custom-name"
-export GITHUB_REPO="owner/repo"
-export CARGO_TOML="path/to/Cargo.toml"
-./release.sh patch
-```
-
-#### 2. **GitHub Actions Workflows**
+#### **GitHub Actions Workflows**
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
 - Multi-platform testing (Ubuntu, macOS, Windows)
-- Rust stable and beta versions
-- Format checking (`cargo fmt`)
-- Linting (`cargo clippy`)
-- Security audit (`cargo audit`)
-- MSRV (Minimum Supported Rust Version) testing
+- Rust stable version only
+- Format checking, linting, tests
+- Security audit
+- MSRV (1.81) testing
 
 **Release Pipeline** (`.github/workflows/release.yml`):
 - Triggered by version tags (v*.*.*)
-- Cross-platform binary builds
-- Automatic GitHub Release creation
-- Asset uploads with release notes
+- Builds binaries for:
+  - Linux x86_64 (glibc and musl)
+  - Windows x86_64
+  - macOS x86_64 and aarch64
+- Creates GitHub release with all artifacts
 
-#### 3. **Alternative Release Tools**
+**Publish Pipeline** (`.github/workflows/publish.yml`):
+- Triggered by version tags
+- Runs final quality checks
+- Publishes to crates.io
 
-**cargo-release** (`release-cargo.sh`):
+#### **Justfile Integration**
+
+For those who prefer `just`:
 ```bash
-./release-cargo.sh patch    # Simple one-command release
+just release-patch    # Same as ./quick-release.sh patch
+just release-minor    # Same as ./quick-release.sh minor
+just release-major    # Same as ./quick-release.sh major
 ```
 
-**release-plz** (削除済み):
-- GitHub ActionsのデフォルトGITHUB_TOKENではPR作成権限がないため削除
-- 代替案: GitHub App tokenまたはPersonal Access Token (PAT)を使用
-- 現在は`quick-release.sh`スクリプトで同等の機能を提供
+### Release Process
 
-**justfile** (Task runner):
-```bash
-just release-patch         # Release with pre-checks
-just dry-run-minor         # Test release process
-just check                 # Run all quality checks
-```
-
-### Release Process Workflow
-
-1. **Development Phase:**
+1. **Make your changes and commit them**
+2. **Run the release command:**
    ```bash
-   # During development
-   just check                    # Run all checks
-   cargo clippy --fix           # Fix issues
-   cargo fmt                    # Format code
+   ./quick-release.sh patch  # or minor/major
    ```
+3. **Confirm when prompted**
+4. **Monitor progress at:** https://github.com/nwiizo/cctx/actions
+5. **Release appears at:** https://github.com/nwiizo/cctx/releases
 
-2. **Pre-Release Validation:**
-   ```bash
-   # Test release process
-   ./release.sh --dry-run patch
-   ./release.sh status          # Check current state
-   ```
+### Quality Requirements
 
-3. **Release Execution:**
-   ```bash
-   # Actual release
-   ./release.sh patch           # Interactive with confirmations
-   ```
-
-4. **Post-Release Verification:**
-   ```bash
-   # Verify deployment
-   ./release.sh status 0.1.1    # Check specific version
-   ./release.sh list            # View recent releases
-   ```
-
-### Quality Gates
-
-All releases must pass:
+All releases automatically check:
 - ✅ `cargo fmt --check` (code formatting)
 - ✅ `cargo clippy -- -D warnings` (linting)
 - ✅ `cargo test` (unit tests)
 - ✅ `cargo build --release` (release build)
-- ✅ `cargo audit` (security vulnerabilities)
-- ✅ Working directory clean (no uncommitted changes)
+- ✅ Git working directory is clean
+- ✅ On main branch and up-to-date with origin
 
-### Versioning Strategy
+### Removed Tools
 
-Following [Semantic Versioning](https://semver.org/):
-- **Patch** (0.1.0 → 0.1.1): Bug fixes, minor improvements
-- **Minor** (0.1.0 → 0.2.0): New features, backward compatible
-- **Major** (0.1.0 → 1.0.0): Breaking changes
+To keep things simple, we've removed:
+- ❌ `release.sh` - Too complex with many features
+- ❌ `release-cargo.sh` - Redundant cargo-release wrapper
+- ❌ `release-plz` - GitHub Actions permission issues
 
 ### CI/CD Configuration
 
-**GitHub Actions Secrets:**
-- `CARGO_REGISTRY_TOKEN`: Required for crates.io publishing
+**Required Secrets:**
+- `CARGO_REGISTRY_TOKEN`: For crates.io publishing
 
-**Environment Variables:**
-- `RUST_VERSION`: "1.75" (MSRV)
-- `CARGO_TERM_COLOR`: "always"
+**Key Settings:**
+- MSRV: Rust 1.81
+- Platforms: Linux, macOS, Windows
+- Release formats: Binary executables + crates.io package
 
 ## Development Guidelines
 
@@ -315,43 +275,6 @@ When testing changes, verify:
    - Handle missing files gracefully
    - Use atomic operations where possible
 
-## Release Tools Summary
-
-| Tool | Use Case | Command | Automation Level |
-|------|----------|---------|------------------|
-| **release.sh** | Primary release tool | `./release.sh patch` | Semi-automated with checks |
-| release-cargo.sh | Simple releases | `./release-cargo.sh patch` | Fully automated |
-| justfile | Development tasks | `just release-patch` | Task-based |
-| release-plz | Git-flow releases | Automatic on PR merge | Fully automated |
-| Manual | Emergency/custom | `cargo publish` | Manual |
-
-### Recommended Workflow
-
-For most releases, use the primary **release.sh** script:
-
-1. **Development** → `just check` (validate changes)
-2. **Pre-release** → `./release.sh --dry-run patch` (test)
-3. **Release** → `./release.sh patch` (execute)
-4. **Verify** → `./release.sh status` (confirm deployment)
-
-## Release Checklist (Automated)
-
-The release.sh script automatically handles:
-
-- ✅ Version validation and bumping in `Cargo.toml`
-- ✅ Code formatting (`cargo fmt --check`)
-- ✅ Linting (`cargo clippy -- -D warnings`)
-- ✅ Test execution (`cargo test`)
-- ✅ Release build (`cargo build --release`)
-- ✅ Git tagging and commit creation
-- ✅ GitHub push and release creation
-- ✅ CI/CD monitoring and status checking
-- ✅ Crates.io publishing with confirmation
-- ✅ Cross-platform deployment verification
-
-Manual steps (if needed):
-- Update README for major changes
-- Update documentation for new features
 
 ## 🎯 UX Design Philosophy
 

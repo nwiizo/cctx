@@ -405,33 +405,27 @@ This project includes comprehensive automation tools:
 
 ### 🚀 Release Management
 
-**Quick Release (Recommended):**
+**Simple One-Command Release:**
 ```bash
-# One-command release with all checks
+# Automatic release with all quality checks
 ./quick-release.sh patch      # 0.1.0 -> 0.1.1
 ./quick-release.sh minor      # 0.1.0 -> 0.2.0
 ./quick-release.sh major      # 0.1.0 -> 1.0.0
 ```
 
-**Alternative Methods:**
-```bash
-# Using release.sh script
-./release.sh status           # Check release status
-./release.sh list            # List recent releases
-./release.sh --dry-run patch # Test release process
-
-# Manual version bump (triggers auto-release)
-# 1. Update version in Cargo.toml
-# 2. Commit and push to main
-# 3. GitHub Actions automatically creates tag and release
-```
+The script automatically:
+- ✅ Runs quality checks (fmt, clippy, test, build)
+- ✅ Updates version in Cargo.toml
+- ✅ Creates git commit and tag
+- ✅ Pushes to GitHub
+- ✅ Triggers GitHub Actions for binary builds and crates.io publishing
 
 ### 🛠️ Development Tasks
 
 ```bash
 # Using justfile (install: cargo install just)
 just check              # Run all quality checks
-just release-patch      # Release patch version
+just release-patch      # Same as ./quick-release.sh patch
 just setup              # Setup development environment
 just audit              # Security audit
 just completions fish   # Generate shell completions
