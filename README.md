@@ -12,14 +12,15 @@
 ## ✨ Features
 
 - 🔀 **Instant context switching** - Switch between configurations in milliseconds
-- 🎯 **Interactive selection** - Built-in fuzzy finder with fzf integration
+- 🎯 **Predictable UX** - Default behavior always uses user-level contexts (no surprises!)
 - 🛡️ **Security-first** - Separate permissions for work, personal, and project contexts
-- 🎨 **Beautiful CLI** - Colorized output with clear status indicators  
+- 🎨 **Beautiful CLI** - Colorized output with helpful hints and visual indicators
 - 🚀 **Shell completions** - Tab completion for all major shells
 - 📦 **Zero dependencies** - Single binary, works everywhere
 - 🔄 **Previous context** - Quick switch back with `cctx -`
 - 📁 **File-based** - Simple JSON files you can edit manually
 - 🎭 **Kubectx-inspired** - Familiar UX for Kubernetes users
+- 💡 **Progressive disclosure** - Shows project/local contexts when available
 
 ## 🚀 Quick Start
 
@@ -355,7 +356,8 @@ cctx -s restricted | grep -i "allow\|deny"
 ### ⚡ Productivity Boosters
 
 - 🔄 **Use `cctx -` frequently** - Quick toggle between two contexts
-- 🎨 **Color-code your terminals** - Different colors for different contexts
+- 🎯 **Trust the defaults** - `cctx` (no flags) handles 90% of use cases perfectly
+- 💡 **Follow the hints** - When cctx shows hints, they're contextually relevant
 - ⌨️ **Set up aliases** - `alias work='cctx work'`, `alias home='cctx personal'`
 - 📝 **Document your contexts** - Add comments in JSON for future reference
 
@@ -444,6 +446,17 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🎯 Design Philosophy (v0.1.1+)
+
+**cctx follows the principle of "Predictable defaults with explicit overrides":**
+
+- 🎯 **Default behavior is always the same** - uses user-level contexts (`~/.claude/settings.json`)
+- 💡 **Helpful discovery** - shows hints when project/local contexts are available
+- 🚀 **Simple when simple** - 90% of usage needs zero flags
+- 🔧 **Explicit when needed** - `--in-project` and `--local` for specific cases
+
+This approach eliminates surprises and cognitive overhead while maintaining full functionality.
 
 ## ⚠️ Compatibility Notice
 

@@ -28,15 +28,22 @@
 2. **Simple naming**: Filename (without .json) = context name
 3. **Atomic operations**: Context switching is done by copying files
 4. **Hidden state file**: Prefixed with `.` to hide from context listings
+5. **Predictable UX**: Default behavior always uses user-level contexts for consistency
+6. **Progressive disclosure**: Helpful hints show when project/local contexts are available
 
-## Command Reference
+## 🎯 Command Reference
 
-### Basic Commands
-- `cctx` - List contexts or interactive selection
+### 🚀 Basic Commands
+- `cctx` - List contexts (defaults to user-level, shows helpful hints)
 - `cctx <name>` - Switch to context
 - `cctx -` - Switch to previous context
 
-### Management Commands
+### 🏗️ Settings Level Management
+- `cctx` - Default: user-level contexts (`~/.claude/settings.json`)
+- `cctx --in-project` - Project-level contexts (`./.claude/settings.json`)
+- `cctx --local` - Local project contexts (`./.claude/settings.local.json`)
+
+### 🛠️ Management Commands
 - `cctx -n <name>` - Create new context from current settings
 - `cctx -d <name>` - Delete context
 - `cctx -r <old> <new>` - Rename context
@@ -45,7 +52,7 @@
 - `cctx -s [name]` - Show context content
 - `cctx -u` - Unset current context
 
-### Import/Export
+### 📥📤 Import/Export
 - `cctx --export <name>` - Export to stdout
 - `cctx --import <name>` - Import from stdin
 
@@ -67,10 +74,12 @@
 - Validate context names (no `/`, `.`, `..`, or empty)
 - Check for active context before deletion
 
-### Interactive Features
+### 🎨 Interactive Features
 1. **fzf integration**: Auto-detect and use if available
 2. **Built-in fuzzy finder**: Fallback when fzf not available
 3. **Color coding**: Current context highlighted in green
+4. **Helpful hints**: Shows available project/local contexts when at user level
+5. **Visual indicators**: Emojis for different context levels (👤 User, 📁 Project, 💻 Local)
 
 ## Release Management
 
@@ -343,7 +352,44 @@ Manual steps (if needed):
 - Update README for major changes
 - Update documentation for new features
 
-## Notes for AI Assistants
+## 🎯 UX Design Philosophy
+
+### 🏆 Simplified User Experience (v0.1.1+)
+
+**Core Principle**: **Predictable defaults with explicit overrides**
+
+#### ✅ What We Did Right
+- **Removed complex auto-detection** that was confusing users
+- **Default always uses user-level** for predictable behavior
+- **Clear explicit flags** (`--in-project`, `--local`) when needed
+- **Helpful progressive disclosure** - hints when other contexts available
+- **Visual clarity** with emojis and condensed information
+
+#### ❌ What We Avoided
+- **Complex flag combinations** (`--user`, `--project`, `--local`, `--level`)
+- **Unpredictable auto-detection logic** 
+- **Verbose technical output** showing file paths
+- **Cognitive overhead** from too many options
+
+#### 🎯 UX Goals Achieved
+1. **⚡ Speed**: Default behavior is instant and predictable
+2. **🧠 Simplicity**: Two explicit flags instead of four confusing ones
+3. **🎯 Discoverability**: Helpful hints guide users to advanced features
+4. **🔄 Consistency**: Always behaves the same way (user-level default)
+
+### 📝 Usage Patterns
+
+```bash
+# 90% of usage - simple and predictable
+cctx                    # List user contexts + helpful hints
+cctx work              # Switch to work context
+
+# 10% of usage - explicit when needed  
+cctx --in-project staging   # Project-specific contexts
+cctx --local debug         # Local development contexts
+```
+
+## 📚 Notes for AI Assistants
 
 When working on this codebase:
 
@@ -352,7 +398,9 @@ When working on this codebase:
 3. **Preserve existing behavior** unless explicitly asked to change it
 4. **Follow Rust idioms** and best practices
 5. **Keep the kubectx-inspired UX** - simple, fast, intuitive
-6. **Document any new features** in both code and README
-7. **Consider edge cases** - empty states, missing files, permissions
+6. **Maintain predictable defaults** - user should never be surprised
+7. **Document any new features** in both code and README
+8. **Consider edge cases** - empty states, missing files, permissions
+9. **Progressive disclosure** - show advanced features only when relevant
 
-Remember: This tool is about speed and simplicity. Every feature should make context switching faster or easier, not more complex.
+Remember: This tool is about speed and simplicity. Every feature should make context switching faster or easier, not more complex. **Predictability beats cleverness.**
