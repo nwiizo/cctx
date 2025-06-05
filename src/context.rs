@@ -94,7 +94,7 @@ impl ContextManager {
     }
 
     pub fn context_path(&self, name: &str) -> PathBuf {
-        self.contexts_dir.join(format!("{}.json", name))
+        self.contexts_dir.join(format!("{name}.json"))
     }
 
     fn load_state(&self) -> Result<State> {
@@ -290,7 +290,7 @@ impl ContextManager {
         let json: serde_json::Value = serde_json::from_str(&content)?;
         let pretty = serde_json::to_string_pretty(&json)?;
 
-        println!("{}", pretty);
+        println!("{pretty}");
         Ok(())
     }
 
@@ -320,7 +320,7 @@ impl ContextManager {
         }
 
         let content = fs::read_to_string(context_path)?;
-        print!("{}", content);
+        print!("{content}");
         Ok(())
     }
 

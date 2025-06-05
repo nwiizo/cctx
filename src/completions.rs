@@ -55,11 +55,11 @@ pub fn print_enhanced_completions(shell: Shell) -> Result<()> {
                     return 0
                     ;;
                 -d|--delete|-e|--edit|-s|--show|--export)
-                    COMPREPLY=($(compgen -W "{}" -- "${{cur}}"))
+                    COMPREPLY=($(compgen -W "{context_list}" -- "${{cur}}"))
                     return 0
                     ;;
                 *)
-                    COMPREPLY=($(compgen -W "{} ${{opts}}" -- "${{cur}}"))
+                    COMPREPLY=($(compgen -W "{context_list} ${{opts}}" -- "${{cur}}"))
                     return 0
                     ;;
             esac
@@ -71,8 +71,7 @@ if [[ "${{BASH_VERSINFO[0]}}" -eq 4 && "${{BASH_VERSINFO[1]}}" -ge 4 || "${{BASH
     complete -F _cctx -o nosort -o bashdefault -o default cctx
 else
     complete -F _cctx -o bashdefault -o default cctx
-fi"#,
-                context_list, context_list
+fi"#
             );
         }
         Shell::Fish => {
@@ -82,10 +81,7 @@ fish\t''
 powershell\t''
 zsh\t''\"");
             for opt in ["-d", "-e", "-s", "--delete", "--edit", "--show", "--export"] {
-                println!(
-                    "complete -c cctx {} -d 'Context name' -r -f -a \"{}\"",
-                    opt, context_list
-                );
+                println!("complete -c cctx {opt} -d 'Context name' -r -f -a \"{context_list}\"");
             }
             println!(
                 "complete -c cctx -s d -l delete -d 'Delete context mode'
@@ -102,7 +98,7 @@ complete -c cctx -s h -l help -d 'Print help'
 complete -c cctx -s V -l version -d 'Print version'"
             );
             if !contexts.is_empty() {
-                println!("complete -c cctx -f -a \"{}\"", context_list);
+                println!("complete -c cctx -f -a \"{context_list}\"");
             }
         }
         Shell::Zsh => {
@@ -113,7 +109,7 @@ complete -c cctx -s V -l version -d 'Print version'"
                     "local contexts=({})\n    _describe 'contexts' contexts",
                     contexts
                         .iter()
-                        .map(|c| format!("'{}'", c))
+                        .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" ")
                 )
@@ -165,7 +161,7 @@ _cctx() {{
 }}
 
 _cctx_contexts() {{
-    {}
+    {context_completions}
 }}
 
 (( $+functions[_cctx_commands] )) ||
@@ -178,8 +174,7 @@ if [ "$funcstack[1]" = "_cctx" ]; then
     _cctx "$@"
 else
     compdef _cctx cctx
-fi"#,
-                context_completions
+fi"#
             );
         }
         _ => {
