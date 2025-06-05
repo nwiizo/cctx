@@ -7,9 +7,10 @@ mod state;
 use anyhow::Result;
 use clap::Parser;
 
-use cli::{Cli, SettingsLevel};
+use cli::Cli;
 use completions::print_enhanced_completions;
 use context::ContextManager;
+use context::SettingsLevel;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -19,18 +20,14 @@ fn main() -> Result<()> {
         return print_enhanced_completions(shell);
     }
 
-    // Determine settings level based on CLI arguments
-    let settings_level = if cli.user {
-        SettingsLevel::User
-    } else if cli.project {
-        SettingsLevel::Project
-    } else if cli.local {
+    // Determine settings level: default to User, explicit flags override
+    let settings_level = if cli.local {
         SettingsLevel::Local
-    } else if let Some(level) = cli.level {
-        level
+    } else if cli.in_project {
+        SettingsLevel::Project
     } else {
-        // Auto-detect best level if not specified
-        ContextManager::detect_best_level()
+        // Default: always use user level for predictable behavior
+        SettingsLevel::User
     };
 
     let manager = ContextManager::new_with_level(settings_level)?;

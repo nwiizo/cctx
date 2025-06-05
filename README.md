@@ -75,7 +75,7 @@ cctx -c
 
 ### 🏗️ Settings Level Management
 
-cctx respects [Claude Code's settings hierarchy](https://docs.anthropic.com/en/docs/claude-code/settings):
+cctx respects [Claude Code's settings hierarchy](https://docs.anthropic.com/en/docs/claude-code/settings) with a simple, predictable approach:
 
 1. **Enterprise policies** (highest priority)
 2. **Command-line arguments** 
@@ -84,18 +84,16 @@ cctx respects [Claude Code's settings hierarchy](https://docs.anthropic.com/en/d
 5. **User settings** (`~/.claude/settings.json`) (lowest priority)
 
 ```bash
-# Auto-detect best settings level (default behavior)
-cctx
+# Default: always uses user-level contexts (predictable)
+cctx                       # Manages ~/.claude/settings.json
 
-# Force specific settings levels
-cctx --user work           # Use ~/.claude/settings.json
-cctx --project personal    # Use ./.claude/settings.json
-cctx --local staging       # Use ./.claude/settings.local.json
+# Explicit flags for project/local contexts
+cctx --in-project          # Manages ./.claude/settings.json
+cctx --local               # Manages ./.claude/settings.local.json
 
-# Or use explicit level flag
-cctx --level user work
-cctx --level project personal
-cctx --level local staging
+# All commands work with any level
+cctx --in-project work     # Switch to 'work' in project contexts
+cctx --local staging       # Switch to 'staging' in local contexts
 ```
 
 ### 🛠️ Context Management
@@ -251,18 +249,18 @@ cctx -n client-project
 
 **👤 User-Level Development:**
 ```bash
-# Personal development with full permissions
-cctx --user personal
+# Personal development with full permissions (default behavior)
+cctx personal
 
-# Work context with restrictions
-cctx --user work
+# Work context with restrictions (default behavior)
+cctx work
 ```
 
 **📁 Project-Level Collaboration:**
 ```bash
 # Shared team settings (committed to git)
-cctx --project staging
-cctx --project production
+cctx --in-project staging
+cctx --in-project production
 
 # Personal project overrides (gitignored)
 cctx --local development
@@ -271,12 +269,12 @@ cctx --local debug
 
 **🔄 Multi-Level Management:**
 ```bash
-# Check current level
-cctx                    # Shows: ℹ️ Settings Level: 👤 User (~/.claude/settings.json)
+# Check current level (always shows helpful context)
+cctx                    # Shows: 👤 User contexts + hints for project/local if available
 
 # Switch levels in same directory
-cctx --user personal    # User level
-cctx --project staging  # Project level  
+cctx personal           # User level (default)
+cctx --in-project staging  # Project level  
 cctx --local debug      # Local level
 ```
 

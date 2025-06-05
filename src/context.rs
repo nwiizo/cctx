@@ -6,7 +6,12 @@ use std::process::Command;
 
 use crate::state::State;
 
-use crate::cli::SettingsLevel;
+#[derive(Debug, Clone)]
+pub enum SettingsLevel {
+    User,    // ~/.claude/settings.json (default)
+    Project, // ./.claude/settings.json (explicit)
+    Local,   // ./.claude/settings.local.json (explicit)
+}
 
 pub struct ContextManager {
     pub contexts_dir: PathBuf,
@@ -59,23 +64,33 @@ impl ContextManager {
         })
     }
 
-    pub fn detect_best_level() -> SettingsLevel {
+    /// Check if project-level contexts are available in current directory
+    pub fn has_project_contexts() -> bool {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let claude_dir = current_dir.join(".claude");
+        let project_contexts_dir = current_dir.join(".claude").join("settings");
 
-        // Check if we're in a project with Claude settings
-        if claude_dir.exists() {
-            // Prefer local settings if they exist
-            if claude_dir.join("settings.local.json").exists() {
-                SettingsLevel::Local
-            } else if claude_dir.join("settings.json").exists() {
-                SettingsLevel::Project
-            } else {
-                SettingsLevel::User
+        if let Ok(entries) = fs::read_dir(&project_contexts_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                        if !filename.starts_with('.') {
+                            return true;
+                        }
+                    }
+                }
             }
-        } else {
-            SettingsLevel::User
         }
+        false
+    }
+
+    /// Check if local contexts are available in current directory  
+    pub fn has_local_contexts() -> bool {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        current_dir
+            .join(".claude")
+            .join("settings.local.json")
+            .exists()
     }
 
     pub fn context_path(&self, name: &str) -> PathBuf {
@@ -352,55 +367,62 @@ impl ContextManager {
         let contexts = self.list_contexts()?;
         let current = self.get_current_context()?;
 
-        if contexts.is_empty() {
-            if !quiet {
-                self.show_settings_info();
-            }
-            println!("No contexts found. Create one with: cctx -n <name>");
-            return Ok(());
-        }
-
         if quiet {
             // Quiet mode - only show current context
             if let Some(current_ctx) = current {
                 println!("{}", current_ctx);
             }
-        } else {
-            // Show settings level info
-            self.show_settings_info();
-            println!();
+            return Ok(());
+        }
 
-            // List contexts with current highlighted
-            for ctx in contexts {
-                if Some(&ctx) == current.as_ref() {
-                    println!("{} {}", ctx.green().bold(), "(current)".dimmed());
-                } else {
-                    println!("{}", ctx);
-                }
+        // Show helpful information for user-level contexts
+        if matches!(self.settings_level, SettingsLevel::User) {
+            // Show available project contexts as suggestion
+            if Self::has_project_contexts() {
+                println!(
+                    "{} Project contexts available: run 'cctx --in-project' to manage",
+                    "💡".yellow()
+                );
+            }
+            if Self::has_local_contexts() {
+                println!(
+                    "{} Local contexts available: run 'cctx --local' to manage",
+                    "💡".yellow()
+                );
+            }
+        }
+
+        // Show current settings level (condensed)
+        let level_emoji = match self.settings_level {
+            SettingsLevel::User => "👤",
+            SettingsLevel::Project => "📁",
+            SettingsLevel::Local => "💻",
+        };
+
+        if contexts.is_empty() {
+            println!(
+                "{} {} contexts: No contexts found. Create one with: cctx -n <name>",
+                level_emoji,
+                format!("{:?}", self.settings_level).cyan()
+            );
+            return Ok(());
+        }
+
+        println!(
+            "{} {} contexts:",
+            level_emoji,
+            format!("{:?}", self.settings_level).cyan().bold()
+        );
+
+        // List contexts with current highlighted
+        for ctx in contexts {
+            if Some(&ctx) == current.as_ref() {
+                println!("  {} {}", ctx.green().bold(), "(current)".dimmed());
+            } else {
+                println!("  {}", ctx);
             }
         }
 
         Ok(())
     }
-
-    pub fn show_settings_info(&self) {
-        let level_str = match self.settings_level {
-            SettingsLevel::User => "👤 User",
-            SettingsLevel::Project => "📁 Project",
-            SettingsLevel::Local => "💻 Local",
-        };
-
-        let path_display = self
-            .claude_settings_path
-            .to_string_lossy()
-            .replace(&std::env::var("HOME").unwrap_or_default(), "~");
-
-        println!(
-            "{} Settings Level: {} ({})",
-            "ℹ️".blue(),
-            level_str.cyan().bold(),
-            path_display.dimmed()
-        );
-    }
-
 }

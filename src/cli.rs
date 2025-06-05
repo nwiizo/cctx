@@ -53,26 +53,11 @@ pub struct Cli {
     #[arg(short = 'q', long = "quiet")]
     pub quiet: bool,
 
-    /// Settings level: user (~/.claude), project (./.claude), local (./.claude/settings.local.json)
-    #[arg(long = "level", value_enum)]
-    pub level: Option<SettingsLevel>,
+    /// Manage project-level contexts (./.claude/settings.json)
+    #[arg(long = "in-project")]
+    pub in_project: bool,
 
-    /// Force user-level settings (~/.claude/settings.json)
-    #[arg(long = "user", conflicts_with = "level")]
-    pub user: bool,
-
-    /// Force project-level settings (./.claude/settings.json)
-    #[arg(long = "project", conflicts_with = "level")]
-    pub project: bool,
-
-    /// Force local project settings (./.claude/settings.local.json)
-    #[arg(long = "local", conflicts_with = "level")]
+    /// Manage local project contexts (./.claude/settings.local.json)
+    #[arg(long = "local")]
     pub local: bool,
-}
-
-#[derive(clap::ValueEnum, Clone, Debug)]
-pub enum SettingsLevel {
-    User,
-    Project,
-    Local,
 }
