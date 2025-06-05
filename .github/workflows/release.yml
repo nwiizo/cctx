@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: cctx-linux-x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: cctx-linux-x86_64-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: cctx-windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: cctx-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: cctx-macos-aarch64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install musl tools
+      if: matrix.target == 'x86_64-unknown-linux-musl'
+      run: sudo apt-get install -y musl-tools
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build release binary
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Prepare artifact (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cp target/${{ matrix.target }}/release/cctx ${{ matrix.artifact }}
+        strip ${{ matrix.artifact }}
+
+    - name: Prepare artifact (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        copy target\${{ matrix.target }}\release\cctx.exe ${{ matrix.artifact }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact }}
+        path: ${{ matrix.artifact }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          cctx-linux-x86_64/cctx-linux-x86_64
+          cctx-linux-x86_64-musl/cctx-linux-x86_64-musl
+          cctx-windows-x86_64.exe/cctx-windows-x86_64.exe
+          cctx-macos-x86_64/cctx-macos-x86_64
+          cctx-macos-aarch64/cctx-macos-aarch64
+        body: |
+          ## cctx ${{ github.ref_name }}
+          
+          Claude Code context manager for switching between multiple settings.json configurations.
+          
+          ### Installation
+          
+          Download the appropriate binary for your platform:
+          - **Linux (x86_64)**: `cctx-linux-x86_64` 
+          - **Linux (x86_64, static)**: `cctx-linux-x86_64-musl`
+          - **Windows (x86_64)**: `cctx-windows-x86_64.exe`
+          - **macOS (Intel)**: `cctx-macos-x86_64`
+          - **macOS (Apple Silicon)**: `cctx-macos-aarch64`
+          
+          Make the binary executable and place it in your PATH:
+          ```bash
+          chmod +x cctx-*
+          sudo mv cctx-* /usr/local/bin/cctx
+          ```
+          
+          ### Usage
+          
+          ```bash
+          # List contexts
+          cctx
+          
+          # Switch to a context
+          cctx work
+          
+          # Create new context
+          cctx -n personal
+          
+          # Switch to previous context
+          cctx -
+          ```
+          
+          See the [README](https://github.com/nwiizo/cctx) for more details.
+        draft: false
+        prerelease: false
