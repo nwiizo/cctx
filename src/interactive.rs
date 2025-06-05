@@ -35,7 +35,7 @@ impl ContextManager {
         cmd.arg("--no-multi");
 
         if let Some(ref current_ctx) = current {
-            cmd.arg("--header").arg(format!("Current: {}", current_ctx));
+            cmd.arg("--header").arg(format!("Current: {current_ctx}"));
         }
 
         let mut child = cmd
@@ -48,7 +48,7 @@ impl ContextManager {
                 if Some(ctx) == current.as_ref() {
                     writeln!(stdin, "{} {}", ctx.green().bold(), "(current)".dimmed())?;
                 } else {
-                    writeln!(stdin, "{}", ctx)?;
+                    writeln!(stdin, "{ctx}")?;
                 }
             }
         }
@@ -76,7 +76,7 @@ impl ContextManager {
             .iter()
             .map(|ctx| {
                 if Some(ctx) == current.as_ref() {
-                    format!("{} (current)", ctx)
+                    format!("{ctx} (current)")
                 } else {
                     ctx.clone()
                 }
@@ -110,7 +110,7 @@ impl ContextManager {
 
         let selected = &contexts[selection];
         let confirm = Confirm::new()
-            .with_prompt(format!("Delete context \"{}\"?", selected))
+            .with_prompt(format!("Delete context \"{selected}\"?"))
             .default(false)
             .interact()?;
 

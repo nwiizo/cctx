@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     // Handle special modes first
     if cli.current {
         if let Some(current) = manager.get_current_context()? {
-            println!("{}", current);
+            println!("{current}");
         }
         return Ok(());
     }

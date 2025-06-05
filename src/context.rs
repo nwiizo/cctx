@@ -370,7 +370,7 @@ impl ContextManager {
         if quiet {
             // Quiet mode - only show current context
             if let Some(current_ctx) = current {
-                println!("{}", current_ctx);
+                println!("{current_ctx}");
             }
             return Ok(());
         }
@@ -419,7 +419,7 @@ impl ContextManager {
             if Some(&ctx) == current.as_ref() {
                 println!("  {} {}", ctx.green().bold(), "(current)".dimmed());
             } else {
-                println!("  {}", ctx);
+                println!("  {ctx}");
             }
         }
 
