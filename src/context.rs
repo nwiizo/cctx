@@ -1,0 +1,406 @@
+use anyhow::{bail, Context, Result};
+use colored::*;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+use crate::state::State;
+
+use crate::cli::SettingsLevel;
+
+pub struct ContextManager {
+    pub contexts_dir: PathBuf,
+    pub claude_settings_path: PathBuf,
+    pub state_path: PathBuf,
+    pub settings_level: SettingsLevel,
+}
+
+impl ContextManager {
+    pub fn new() -> Result<Self> {
+        Self::new_with_level(SettingsLevel::User)
+    }
+
+    pub fn new_with_level(level: SettingsLevel) -> Result<Self> {
+        let home_dir = dirs::home_dir().context("Failed to get home directory")?;
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        let (claude_settings_path, contexts_dir, state_path) = match level {
+            SettingsLevel::User => {
+                let claude_dir = home_dir.join(".claude");
+                let contexts_dir = claude_dir.join("settings");
+                let claude_settings_path = claude_dir.join("settings.json");
+                let state_path = contexts_dir.join(".cctx-state.json");
+                (claude_settings_path, contexts_dir, state_path)
+            }
+            SettingsLevel::Project => {
+                let claude_dir = current_dir.join(".claude");
+                let contexts_dir = claude_dir.join("settings");
+                let claude_settings_path = claude_dir.join("settings.json");
+                let state_path = contexts_dir.join(".cctx-state.json");
+                (claude_settings_path, contexts_dir, state_path)
+            }
+            SettingsLevel::Local => {
+                let claude_dir = current_dir.join(".claude");
+                let contexts_dir = claude_dir.join("settings");
+                let claude_settings_path = claude_dir.join("settings.local.json");
+                let state_path = contexts_dir.join(".cctx-state.local.json");
+                (claude_settings_path, contexts_dir, state_path)
+            }
+        };
+
+        // Create directories if they don't exist
+        fs::create_dir_all(&contexts_dir)?;
+
+        Ok(Self {
+            contexts_dir,
+            claude_settings_path,
+            state_path,
+            settings_level: level,
+        })
+    }
+
+    pub fn detect_best_level() -> SettingsLevel {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let claude_dir = current_dir.join(".claude");
+
+        // Check if we're in a project with Claude settings
+        if claude_dir.exists() {
+            // Prefer local settings if they exist
+            if claude_dir.join("settings.local.json").exists() {
+                SettingsLevel::Local
+            } else if claude_dir.join("settings.json").exists() {
+                SettingsLevel::Project
+            } else {
+                SettingsLevel::User
+            }
+        } else {
+            SettingsLevel::User
+        }
+    }
+
+    pub fn context_path(&self, name: &str) -> PathBuf {
+        self.contexts_dir.join(format!("{}.json", name))
+    }
+
+    fn load_state(&self) -> Result<State> {
+        State::load(&self.state_path)
+    }
+
+    fn save_state(&self, state: &State) -> Result<()> {
+        state.save(&self.state_path)
+    }
+
+    pub fn list_contexts(&self) -> Result<Vec<String>> {
+        let mut contexts = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(&self.contexts_dir) {
+            for entry in entries {
+                let entry = entry?;
+                let path = entry.path();
+
+                // Skip hidden files and non-JSON files
+                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                    if filename.starts_with('.') {
+                        continue;
+                    }
+                }
+
+                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                        contexts.push(name.to_string());
+                    }
+                }
+            }
+        }
+
+        contexts.sort();
+        Ok(contexts)
+    }
+
+    pub fn get_current_context(&self) -> Result<Option<String>> {
+        let state = self.load_state()?;
+        Ok(state.current)
+    }
+
+    pub fn switch_context(&self, name: &str) -> Result<()> {
+        let contexts = self.list_contexts()?;
+        if !contexts.contains(&name.to_string()) {
+            bail!("error: no context exists with the name \"{}\"", name);
+        }
+
+        let mut state = self.load_state()?;
+        state.set_current(name.to_string());
+
+        // Copy context settings to Claude settings
+        let context_path = self.context_path(name);
+        let content = fs::read_to_string(&context_path)?;
+
+        // Create .claude directory if it doesn't exist
+        if let Some(parent) = self.claude_settings_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::write(&self.claude_settings_path, content)?;
+        self.save_state(&state)?;
+
+        println!("Switched to context \"{}\"", name.green().bold());
+        Ok(())
+    }
+
+    pub fn switch_to_previous(&self) -> Result<()> {
+        let state = self.load_state()?;
+
+        if let Some(previous) = state.previous {
+            self.switch_context(&previous)?;
+        } else {
+            bail!("error: no previous context");
+        }
+
+        Ok(())
+    }
+
+    pub fn create_context(&self, name: &str) -> Result<()> {
+        if name.is_empty() || name == "-" || name == "." || name == ".." || name.contains('/') {
+            bail!("error: invalid context name \"{}\"", name);
+        }
+
+        let contexts = self.list_contexts()?;
+        if contexts.contains(&name.to_string()) {
+            bail!("error: context \"{}\" already exists", name);
+        }
+
+        let context_path = self.context_path(name);
+
+        if self.claude_settings_path.exists() {
+            // Copy current Claude settings
+            fs::copy(&self.claude_settings_path, &context_path)?;
+            println!(
+                "Context \"{}\" created from current settings",
+                name.green().bold()
+            );
+        } else {
+            // Create empty settings
+            let empty_settings = serde_json::json!({});
+            fs::write(
+                &context_path,
+                serde_json::to_string_pretty(&empty_settings)?,
+            )?;
+            println!("Context \"{}\" created (empty)", name.green().bold());
+        }
+
+        Ok(())
+    }
+
+    pub fn delete_context(&self, name: &str) -> Result<()> {
+        let state = self.load_state()?;
+
+        if state.current.as_ref() == Some(&name.to_string()) {
+            bail!("error: cannot delete the active context \"{}\"", name);
+        }
+
+        let context_path = self.context_path(name);
+        if !context_path.exists() {
+            bail!("error: no context exists with the name \"{}\"", name);
+        }
+
+        fs::remove_file(context_path)?;
+
+        // Update state if this was the previous context
+        if state.previous.as_ref() == Some(&name.to_string()) {
+            let mut new_state = state;
+            new_state.previous = None;
+            self.save_state(&new_state)?;
+        }
+
+        println!("Context \"{}\" deleted", name.red());
+        Ok(())
+    }
+
+    pub fn rename_context(&self, old_name: &str, new_name: &str) -> Result<()> {
+        if new_name.is_empty()
+            || new_name == "-"
+            || new_name == "."
+            || new_name == ".."
+            || new_name.contains('/')
+        {
+            bail!("error: invalid context name \"{}\"", new_name);
+        }
+
+        let contexts = self.list_contexts()?;
+        if !contexts.contains(&old_name.to_string()) {
+            bail!("error: no context exists with the name \"{}\"", old_name);
+        }
+
+        if contexts.contains(&new_name.to_string()) {
+            bail!("error: context \"{}\" already exists", new_name);
+        }
+
+        let old_path = self.context_path(old_name);
+        let new_path = self.context_path(new_name);
+        fs::rename(old_path, new_path)?;
+
+        // Update state if needed
+        let mut state = self.load_state()?;
+        let mut updated = false;
+
+        if state.current.as_ref() == Some(&old_name.to_string()) {
+            state.current = Some(new_name.to_string());
+            updated = true;
+        }
+
+        if state.previous.as_ref() == Some(&old_name.to_string()) {
+            state.previous = Some(new_name.to_string());
+            updated = true;
+        }
+
+        if updated {
+            self.save_state(&state)?;
+        }
+
+        println!(
+            "Context \"{}\" renamed to \"{}\"",
+            old_name,
+            new_name.green().bold()
+        );
+        Ok(())
+    }
+
+    pub fn show_context(&self, name: &str) -> Result<()> {
+        let context_path = self.context_path(name);
+        if !context_path.exists() {
+            bail!("error: no context exists with the name \"{}\"", name);
+        }
+
+        let content = fs::read_to_string(context_path)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        let pretty = serde_json::to_string_pretty(&json)?;
+
+        println!("{}", pretty);
+        Ok(())
+    }
+
+    pub fn edit_context(&self, name: &str) -> Result<()> {
+        let context_path = self.context_path(name);
+        if !context_path.exists() {
+            bail!("error: no context exists with the name \"{}\"", name);
+        }
+
+        let editor = std::env::var("EDITOR")
+            .or_else(|_| std::env::var("VISUAL"))
+            .unwrap_or_else(|_| "vi".to_string());
+
+        let status = Command::new(&editor).arg(&context_path).status()?;
+
+        if !status.success() {
+            bail!("error: editor exited with non-zero status");
+        }
+
+        Ok(())
+    }
+
+    pub fn export_context(&self, name: &str) -> Result<()> {
+        let context_path = self.context_path(name);
+        if !context_path.exists() {
+            bail!("error: no context exists with the name \"{}\"", name);
+        }
+
+        let content = fs::read_to_string(context_path)?;
+        print!("{}", content);
+        Ok(())
+    }
+
+    pub fn import_context(&self, name: &str) -> Result<()> {
+        if name.is_empty() || name == "-" || name == "." || name == ".." || name.contains('/') {
+            bail!("error: invalid context name \"{}\"", name);
+        }
+
+        let contexts = self.list_contexts()?;
+        if contexts.contains(&name.to_string()) {
+            bail!("error: context \"{}\" already exists", name);
+        }
+
+        use std::io::Read;
+        let mut buffer = String::new();
+        std::io::stdin().read_to_string(&mut buffer)?;
+
+        // Validate JSON
+        let _: serde_json::Value =
+            serde_json::from_str(&buffer).context("error: invalid JSON input")?;
+
+        let context_path = self.context_path(name);
+        fs::write(&context_path, buffer)?;
+
+        println!("Context \"{}\" imported", name.green().bold());
+        Ok(())
+    }
+
+    pub fn unset_context(&self) -> Result<()> {
+        if self.claude_settings_path.exists() {
+            fs::remove_file(&self.claude_settings_path)?;
+        }
+
+        let mut state = self.load_state()?;
+        if let Some(_current) = state.unset_current() {
+            self.save_state(&state)?;
+        }
+
+        println!("Unset current context");
+        Ok(())
+    }
+
+    pub fn list_contexts_with_current(&self, quiet: bool) -> Result<()> {
+        let contexts = self.list_contexts()?;
+        let current = self.get_current_context()?;
+
+        if contexts.is_empty() {
+            if !quiet {
+                self.show_settings_info();
+            }
+            println!("No contexts found. Create one with: cctx -n <name>");
+            return Ok(());
+        }
+
+        if quiet {
+            // Quiet mode - only show current context
+            if let Some(current_ctx) = current {
+                println!("{}", current_ctx);
+            }
+        } else {
+            // Show settings level info
+            self.show_settings_info();
+            println!();
+
+            // List contexts with current highlighted
+            for ctx in contexts {
+                if Some(&ctx) == current.as_ref() {
+                    println!("{} {}", ctx.green().bold(), "(current)".dimmed());
+                } else {
+                    println!("{}", ctx);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn show_settings_info(&self) {
+        let level_str = match self.settings_level {
+            SettingsLevel::User => "👤 User",
+            SettingsLevel::Project => "📁 Project",
+            SettingsLevel::Local => "💻 Local",
+        };
+
+        let path_display = self
+            .claude_settings_path
+            .to_string_lossy()
+            .replace(&std::env::var("HOME").unwrap_or_default(), "~");
+
+        println!(
+            "{} Settings Level: {} ({})",
+            "ℹ️".blue(),
+            level_str.cyan().bold(),
+            path_display.dimmed()
+        );
+    }
+
+}

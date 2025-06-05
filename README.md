@@ -73,6 +73,31 @@ cctx -
 cctx -c
 ```
 
+### 🏗️ Settings Level Management
+
+cctx respects [Claude Code's settings hierarchy](https://docs.anthropic.com/en/docs/claude-code/settings):
+
+1. **Enterprise policies** (highest priority)
+2. **Command-line arguments** 
+3. **Local project settings** (`./.claude/settings.local.json`)
+4. **Shared project settings** (`./.claude/settings.json`)
+5. **User settings** (`~/.claude/settings.json`) (lowest priority)
+
+```bash
+# Auto-detect best settings level (default behavior)
+cctx
+
+# Force specific settings levels
+cctx --user work           # Use ~/.claude/settings.json
+cctx --project personal    # Use ./.claude/settings.json
+cctx --local staging       # Use ./.claude/settings.local.json
+
+# Or use explicit level flag
+cctx --level user work
+cctx --level project personal
+cctx --level local staging
+```
+
 ### 🛠️ Context Management
 
 ```bash
@@ -128,16 +153,28 @@ cctx --completions powershell > cctx.ps1
 
 ## 🏗️ File Structure
 
-Contexts are stored as individual JSON files:
+Contexts are stored as individual JSON files at different levels:
 
+**🏠 User Level (`~/.claude/`):**
 ```
 📁 ~/.claude/
-├── ⚙️ settings.json           # Current active context (managed by cctx)
+├── ⚙️ settings.json           # Active user context
 └── 📁 settings/
     ├── 💼 work.json          # Work context  
     ├── 🏠 personal.json      # Personal context
-    ├── 🚀 project-alpha.json # Project-specific context
-    └── 🔒 .cctx-state.json   # Hidden state file (tracks current/previous)
+    └── 🔒 .cctx-state.json   # State tracking
+```
+
+**📁 Project Level (`./.claude/`):**
+```
+📁 ./.claude/
+├── ⚙️ settings.json           # Shared project context
+├── 🔒 settings.local.json     # Local project context (gitignored)
+└── 📁 settings/
+    ├── 🚀 staging.json       # Staging context
+    ├── 🏭 production.json    # Production context
+    ├── 🔒 .cctx-state.json   # Project state
+    └── 🔒 .cctx-state.local.json # Local state
 ```
 
 ## 🎭 Interactive Mode
@@ -208,6 +245,39 @@ cctx personal
 # Project-specific minimal permissions
 cctx -n client-project
 # Configure: only access to ~/projects/client/** 
+```
+
+### 🎯 Settings Level Workflows
+
+**👤 User-Level Development:**
+```bash
+# Personal development with full permissions
+cctx --user personal
+
+# Work context with restrictions
+cctx --user work
+```
+
+**📁 Project-Level Collaboration:**
+```bash
+# Shared team settings (committed to git)
+cctx --project staging
+cctx --project production
+
+# Personal project overrides (gitignored)
+cctx --local development
+cctx --local debug
+```
+
+**🔄 Multi-Level Management:**
+```bash
+# Check current level
+cctx                    # Shows: ℹ️ Settings Level: 👤 User (~/.claude/settings.json)
+
+# Switch levels in same directory
+cctx --user personal    # User level
+cctx --project staging  # Project level  
+cctx --local debug      # Local level
 ```
 
 ## 🔧 Advanced Usage
@@ -376,6 +446,18 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## ⚠️ Compatibility Notice
+
+**cctx** is designed to work with [Claude Code](https://github.com/anthropics/claude-code) configuration files. As Claude Code is actively developed by Anthropic, configuration formats and file structures may change over time.
+
+**We are committed to maintaining compatibility:**
+- 🔄 **Active monitoring** of Claude Code updates and changes
+- 🚀 **Prompt updates** when configuration formats change
+- 🛠️ **Backward compatibility** whenever possible
+- 📢 **Clear migration guides** for breaking changes
+
+If you encounter compatibility issues after a Claude Code update, please [open an issue](https://github.com/nwiizo/cctx/issues) and we'll address it promptly.
 
 ## 🙏 Acknowledgments
 
