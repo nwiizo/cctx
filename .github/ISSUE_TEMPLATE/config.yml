@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions and Discussions
+    url: https://github.com/nwiizo/cctx/discussions
+    about: Ask questions, share ideas, and connect with other cctx users
+  - name: 📖 Documentation
+    url: https://github.com/nwiizo/cctx/blob/main/README.md
+    about: Check out the documentation for usage and examples
+  - name: 🔐 Security Vulnerabilities
+    url: https://github.com/nwiizo/cctx/security/advisories/new
+    about: Please report security vulnerabilities privately through GitHub Security Advisories
