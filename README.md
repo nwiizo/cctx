@@ -448,7 +448,8 @@ The script automatically:
 - ✅ Updates version in Cargo.toml
 - ✅ Creates git commit and tag
 - ✅ Pushes to GitHub
-- ✅ Triggers GitHub Actions for binary builds and crates.io publishing
+- ✅ Triggers GitHub Actions for binary builds
+- 📦 Publish to crates.io manually with `cargo publish`
 
 ### 🛠️ Development Tasks
 
@@ -468,7 +469,7 @@ We welcome contributions! This project includes:
 - 🔄 **Automated CI/CD** - GitHub Actions for testing and releases
 - 🧪 **Quality gates** - Formatting, linting, and tests required
 - 📦 **Multi-platform** - Builds for Linux, macOS, and Windows
-- 🚀 **Auto-releases** - Semantic versioning with automated publishing
+- 🚀 **Auto-releases** - GitHub releases with binaries (crates.io is manual)
 
 See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
@@ -500,7 +501,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ### Merge Operations
 - `cctx --merge-from <source> [target]` - Merge permissions from source into target (default: current)
   - Source can be: `user`, another context name, or file path
+- `cctx --merge-from <source> --merge-full [target]` - Merge ALL settings (not just permissions)
 - `cctx --unmerge <source> [target]` - Remove previously merged permissions
+- `cctx --unmerge <source> --merge-full [target]` - Remove ALL previously merged settings
 - `cctx --merge-history [name]` - Show merge history for context
 
 ### Settings Levels

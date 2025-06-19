@@ -126,10 +126,8 @@ A simple, reliable release script that handles the entire release process:
   - macOS x86_64 and aarch64
 - Creates GitHub release with all artifacts
 
-**Publish Pipeline** (`.github/workflows/publish.yml`):
-- Triggered by version tags
-- Runs final quality checks
-- Publishes to crates.io
+~~**Publish Pipeline** (`.github/workflows/publish.yml`):~~ **Removed**
+- Publishing to crates.io is now done manually (see below)
 
 #### **Justfile Integration**
 
@@ -150,6 +148,11 @@ just release-major    # Same as ./quick-release.sh major
 3. **Confirm when prompted**
 4. **Monitor progress at:** https://github.com/nwiizo/cctx/actions
 5. **Release appears at:** https://github.com/nwiizo/cctx/releases
+6. **Manually publish to crates.io:**
+   ```bash
+   cargo publish
+   ```
+   Note: You must be logged in to crates.io with `cargo login`
 
 ### Quality Requirements
 
@@ -170,13 +173,11 @@ To keep things simple, we've removed:
 
 ### CI/CD Configuration
 
-**Required Secrets:**
-- `CARGO_REGISTRY_TOKEN`: For crates.io publishing
-
 **Key Settings:**
 - MSRV: Rust 1.81
 - Platforms: Linux, macOS, Windows
-- Release formats: Binary executables + crates.io package
+- Release formats: Binary executables
+- crates.io publishing: Manual (no GitHub Secrets required)
 
 ## Development Guidelines
 
