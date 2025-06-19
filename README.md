@@ -448,8 +448,7 @@ The script automatically:
 - ✅ Updates version in Cargo.toml
 - ✅ Creates git commit and tag
 - ✅ Pushes to GitHub
-- ✅ Triggers GitHub Actions for binary builds
-- 📦 Publish to crates.io manually with `cargo publish`
+- ✅ Triggers GitHub Actions for binary builds and crates.io publishing
 
 ### 🛠️ Development Tasks
 
@@ -469,7 +468,7 @@ We welcome contributions! This project includes:
 - 🔄 **Automated CI/CD** - GitHub Actions for testing and releases
 - 🧪 **Quality gates** - Formatting, linting, and tests required
 - 📦 **Multi-platform** - Builds for Linux, macOS, and Windows
-- 🚀 **Auto-releases** - GitHub releases with binaries (crates.io is manual)
+- 🚀 **Auto-releases** - Semantic versioning with automated publishing
 
 See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
