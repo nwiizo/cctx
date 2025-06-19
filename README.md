@@ -470,6 +470,22 @@ We welcome contributions! This project includes:
 - 📦 **Multi-platform** - Builds for Linux, macOS, and Windows
 - 🚀 **Auto-releases** - Semantic versioning with automated publishing
 
+### 🔑 Setting up crates.io Publishing (Maintainers)
+
+To enable automatic publishing to crates.io:
+
+1. **Get your crates.io API token:**
+   ```bash
+   cargo login  # Opens browser to get token
+   # Or visit https://crates.io/me → New Token
+   ```
+
+2. **Add to GitHub repository secrets:**
+   - Go to Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `CARGO_REGISTRY_TOKEN`
+   - Value: Your crates.io API token
+
 See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
 ## 📄 License

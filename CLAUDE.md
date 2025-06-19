@@ -173,6 +173,21 @@ To keep things simple, we've removed:
 **Required Secrets:**
 - `CARGO_REGISTRY_TOKEN`: For crates.io publishing
 
+**Setting up CARGO_REGISTRY_TOKEN:**
+1. **Get your crates.io API token:**
+   ```bash
+   # Login to crates.io (opens browser)
+   cargo login
+   # Or visit https://crates.io/me and click "New Token"
+   ```
+2. **Add to GitHub repository secrets:**
+   - Go to your repository on GitHub
+   - Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `CARGO_REGISTRY_TOKEN`
+   - Value: Your crates.io API token
+   - Click "Add secret"
+
 **Key Settings:**
 - MSRV: Rust 1.81
 - Platforms: Linux, macOS, Windows
