@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./quick-release.sh:*)",
+      "Bash(./target/release/cctx -)",
+      "Bash(rm:*)",
+      "Bash(./target/release/cctx --completions fish)",
+      "Bash(./target/release/cctx --completions zsh)",
+      "Bash(git filter-branch:*)",
+      "Bash(cargo:*)",
+      "Bash(git add:*)",
+      "Bash(git tag:*)",
+      "Bash(git commit:*)",
+      "Bash(git gc:*)",
+      "Bash(./target/release/cctx -n private)",
+      "Bash(git push:*)",
+      "Bash(./target/release/cctx private)",
+      "Bash(gh release view:*)",
+      "Bash(nvim:*)",
+      "Bash(./target/release/cctx --completions bash)",
+      "Bash(gh run view:*)",
+      "Bash(./target/release/cctx -c)",
+      "Bash(./target/release/cctx -q)",
+      "Bash(./target/release/cctx)",
+      "Bash(mkdir:*)",
+      "Bash(./target/release/cctx -s work)",
+      "Bash(gh run list:*)",
+      "Bash(./target/release/cctx -n test-context)",
+      "Bash(git config:*)",
+      "Bash(./target/release/cctx --help)",
+      "Bash(chmod:*)"
+    ],
+    "deny": []
+  }
+}

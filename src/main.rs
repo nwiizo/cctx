@@ -2,6 +2,7 @@ mod cli;
 mod completions;
 mod context;
 mod interactive;
+mod merge;
 mod state;
 
 use anyhow::Result;
@@ -110,6 +111,29 @@ fn main() -> Result<()> {
         } else {
             return Err(anyhow::anyhow!("error: context name required for import"));
         }
+    }
+
+    // Handle merge operations
+    if let Some(source) = cli.merge_from {
+        let target = cli.context.as_deref().unwrap_or("current");
+        if cli.merge_full {
+            return manager.merge_from_full(target, &source);
+        } else {
+            return manager.merge_from(target, &source);
+        }
+    }
+
+    if let Some(source) = cli.unmerge {
+        let target = cli.context.as_deref().unwrap_or("current");
+        if cli.merge_full {
+            return manager.unmerge_from_full(target, &source);
+        } else {
+            return manager.unmerge_from(target, &source);
+        }
+    }
+
+    if cli.merge_history {
+        return manager.show_merge_history(cli.context.as_deref());
     }
 
     // Normal operation

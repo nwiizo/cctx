@@ -60,4 +60,20 @@ pub struct Cli {
     /// Manage local project contexts (./.claude/settings.local.json)
     #[arg(long = "local")]
     pub local: bool,
+
+    /// Merge permissions from another context or settings file
+    #[arg(long = "merge-from")]
+    pub merge_from: Option<String>,
+
+    /// Remove previously merged permissions from a specific source
+    #[arg(long = "unmerge")]
+    pub unmerge: Option<String>,
+
+    /// Show merge history for the current context
+    #[arg(long = "merge-history")]
+    pub merge_history: bool,
+
+    /// Merge all settings (not just permissions) from source
+    #[arg(long = "merge-full")]
+    pub merge_full: bool,
 }

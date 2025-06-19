@@ -132,6 +132,36 @@ cctx --import staging < staging-settings.json
 cctx --export work | ssh remote-host 'cctx --import work'
 ```
 
+### 🔀 Merge Permissions
+
+Merge permissions from other contexts or files to build complex configurations:
+
+```bash
+# Merge user settings into current context
+cctx --merge-from user
+
+# Merge from another context
+cctx --merge-from personal work
+
+# Merge from a specific file
+cctx --merge-from /path/to/permissions.json staging
+
+# Remove previously merged permissions
+cctx --unmerge user
+
+# View merge history
+cctx --merge-history
+
+# Merge into a specific context (default is current)
+cctx --merge-from user production
+```
+
+**Merge Features:**
+- 📋 **Smart deduplication** - Prevents duplicate permissions
+- 📝 **History tracking** - See what was merged from where
+- 🔄 **Reversible** - Unmerge specific sources anytime
+- 🎯 **Granular control** - Target specific contexts
+
 ### 🖥️ Shell Completions
 
 Enable tab completion for faster workflow:
@@ -445,6 +475,43 @@ See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## 📖 Complete Command Reference
+
+### Basic Operations
+- `cctx` - List contexts (defaults to user-level)
+- `cctx <name>` - Switch to context
+- `cctx -` - Switch to previous context
+- `cctx -c` - Show current context name
+- `cctx -q` - Quiet mode (only show current context)
+
+### Context Management
+- `cctx -n <name>` - Create new context from current settings
+- `cctx -d <name>` - Delete context (interactive if no name)
+- `cctx -r <old> <new>` - Rename context
+- `cctx -e [name]` - Edit context with $EDITOR
+- `cctx -s [name]` - Show context content (JSON)
+- `cctx -u` - Unset current context (removes settings file)
+
+### Import/Export
+- `cctx --export [name]` - Export context to stdout
+- `cctx --import <name>` - Import context from stdin
+
+### Merge Operations
+- `cctx --merge-from <source> [target]` - Merge permissions from source into target (default: current)
+  - Source can be: `user`, another context name, or file path
+- `cctx --unmerge <source> [target]` - Remove previously merged permissions
+- `cctx --merge-history [name]` - Show merge history for context
+
+### Settings Levels
+- `cctx` - User-level contexts (default: `~/.claude/settings.json`)
+- `cctx --in-project` - Project-level contexts (`./.claude/settings.json`)
+- `cctx --local` - Local project contexts (`./.claude/settings.local.json`)
+
+### Other Options
+- `cctx --completions <shell>` - Generate shell completions
+- `cctx --help` - Show help information
+- `cctx --version` - Show version information
 
 ## 🎯 Design Philosophy (v0.1.1+)
 

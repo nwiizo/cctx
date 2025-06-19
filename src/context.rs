@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+use crate::merge::MergeManager;
 use crate::state::State;
 
 #[derive(Debug, Clone)]
@@ -422,6 +423,314 @@ impl ContextManager {
                 println!("  {ctx}");
             }
         }
+
+        Ok(())
+    }
+
+    /// Merge permissions from another context or settings file
+    pub fn merge_from(&self, target_context: &str, source: &str) -> Result<()> {
+        // Load target context
+        let target_path = if target_context == "current" {
+            if !self.claude_settings_path.exists() {
+                bail!("error: no current context is set");
+            }
+            self.claude_settings_path.clone()
+        } else {
+            let path = self.context_path(target_context);
+            if !path.exists() {
+                bail!(
+                    "error: no context exists with the name \"{}\"",
+                    target_context
+                );
+            }
+            path
+        };
+
+        // Load source settings
+        let source_content = if source == "user" {
+            // Merge from user-level settings.json
+            let home_dir = dirs::home_dir().context("Failed to get home directory")?;
+            let user_settings = home_dir.join(".claude").join("settings.json");
+            if !user_settings.exists() {
+                bail!("error: user settings file not found at {:?}", user_settings);
+            }
+            fs::read_to_string(&user_settings)?
+        } else if source.ends_with(".json") {
+            // Merge from a file path
+            let source_path = PathBuf::from(source);
+            if !source_path.exists() {
+                bail!("error: source file not found at {:?}", source_path);
+            }
+            fs::read_to_string(&source_path)?
+        } else {
+            // Merge from another context
+            let source_path = self.context_path(source);
+            if !source_path.exists() {
+                bail!("error: no context exists with the name \"{}\"", source);
+            }
+            fs::read_to_string(&source_path)?
+        };
+
+        // Parse JSON
+        let mut target_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
+        let source_json: serde_json::Value = serde_json::from_str(&source_content)?;
+
+        // Perform merge
+        let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        let history_entry =
+            merge_manager.merge_permissions(&mut target_json, &source_json, source)?;
+
+        // Save updated target
+        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+
+        // Update history
+        let context_name = if target_context == "current" {
+            self.get_current_context()?
+                .unwrap_or_else(|| "current".to_string())
+        } else {
+            target_context.to_string()
+        };
+
+        let mut history = merge_manager.load_history(&context_name)?;
+        history.push(history_entry.clone());
+        merge_manager.save_history(&context_name, &history)?;
+
+        println!(
+            "✅ Merged {} permissions from '{}' into '{}'",
+            history_entry.merged_items.len(),
+            source.green(),
+            target_context.green().bold()
+        );
+
+        if !history_entry.merged_items.is_empty() {
+            println!("\n📋 Merged items:");
+            for (i, item) in history_entry.merged_items.iter().enumerate() {
+                if i < 5 {
+                    println!("  • {}", item);
+                } else if i == 5 {
+                    println!("  ... and {} more", history_entry.merged_items.len() - 5);
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Remove previously merged permissions
+    pub fn unmerge_from(&self, target_context: &str, source: &str) -> Result<()> {
+        // Load target context
+        let target_path = if target_context == "current" {
+            if !self.claude_settings_path.exists() {
+                bail!("error: no current context is set");
+            }
+            self.claude_settings_path.clone()
+        } else {
+            let path = self.context_path(target_context);
+            if !path.exists() {
+                bail!(
+                    "error: no context exists with the name \"{}\"",
+                    target_context
+                );
+            }
+            path
+        };
+
+        // Load and parse target JSON
+        let mut target_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
+
+        // Get context name for history
+        let context_name = if target_context == "current" {
+            self.get_current_context()?
+                .unwrap_or_else(|| "current".to_string())
+        } else {
+            target_context.to_string()
+        };
+
+        // Perform unmerge
+        let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        merge_manager.unmerge_permissions(&mut target_json, &context_name, source)?;
+
+        // Save updated target
+        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+
+        println!(
+            "✅ Removed all permissions previously merged from '{}' in '{}'",
+            source.red(),
+            target_context.green().bold()
+        );
+
+        Ok(())
+    }
+
+    /// Merge all settings from another context or settings file (full merge)
+    pub fn merge_from_full(&self, target_context: &str, source: &str) -> Result<()> {
+        // Load target context
+        let target_path = if target_context == "current" {
+            if !self.claude_settings_path.exists() {
+                bail!("error: no current context is set");
+            }
+            self.claude_settings_path.clone()
+        } else {
+            let path = self.context_path(target_context);
+            if !path.exists() {
+                bail!(
+                    "error: no context exists with the name \"{}\"",
+                    target_context
+                );
+            }
+            path
+        };
+
+        // Load source settings
+        let source_content = if source == "user" {
+            // Merge from user-level settings.json
+            let home_dir = dirs::home_dir().context("Failed to get home directory")?;
+            let user_settings = home_dir.join(".claude").join("settings.json");
+            if !user_settings.exists() {
+                bail!("error: user settings file not found at {:?}", user_settings);
+            }
+            fs::read_to_string(&user_settings)?
+        } else if source.ends_with(".json") {
+            // Merge from a file path
+            let source_path = PathBuf::from(source);
+            if !source_path.exists() {
+                bail!("error: source file not found at {:?}", source_path);
+            }
+            fs::read_to_string(&source_path)?
+        } else {
+            // Merge from another context
+            let source_path = self.context_path(source);
+            if !source_path.exists() {
+                bail!("error: no context exists with the name \"{}\"", source);
+            }
+            fs::read_to_string(&source_path)?
+        };
+
+        // Parse JSON
+        let mut target_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
+        let source_json: serde_json::Value = serde_json::from_str(&source_content)?;
+
+        // Perform full merge
+        let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        let history_entry = merge_manager.merge_full(&mut target_json, &source_json, source)?;
+
+        // Save updated target
+        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+
+        // Update history
+        let context_name = if target_context == "current" {
+            self.get_current_context()?
+                .unwrap_or_else(|| "current".to_string())
+        } else {
+            target_context.to_string()
+        };
+
+        let mut history = merge_manager.load_history(&context_name)?;
+        history.push(history_entry.clone());
+        merge_manager.save_history(&context_name, &history)?;
+
+        println!(
+            "✅ Full merge completed: {} items from '{}' into '{}'",
+            history_entry.merged_items.len(),
+            source.green(),
+            target_context.green().bold()
+        );
+
+        if !history_entry.merged_items.is_empty() {
+            println!("\n📋 Merged items:");
+
+            // Group items by type for better display
+            let mut permissions_items = Vec::new();
+            let mut env_items = Vec::new();
+            let mut other_items = Vec::new();
+
+            for item in &history_entry.merged_items {
+                if item.starts_with("permissions.") {
+                    permissions_items.push(item);
+                } else if item.starts_with("env:") {
+                    env_items.push(item);
+                } else {
+                    other_items.push(item);
+                }
+            }
+
+            if !permissions_items.is_empty() {
+                println!("  🔒 Permissions: {} items", permissions_items.len());
+            }
+            if !env_items.is_empty() {
+                println!("  🌍 Environment: {} variables", env_items.len());
+            }
+            if !other_items.is_empty() {
+                let items_str: Vec<String> = other_items.iter().map(|s| s.to_string()).collect();
+                println!("  ⚙️  Settings: {}", items_str.join(", "));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Remove all settings that were previously merged from a specific source (full unmerge)
+    pub fn unmerge_from_full(&self, target_context: &str, source: &str) -> Result<()> {
+        // Load target context
+        let target_path = if target_context == "current" {
+            if !self.claude_settings_path.exists() {
+                bail!("error: no current context is set");
+            }
+            self.claude_settings_path.clone()
+        } else {
+            let path = self.context_path(target_context);
+            if !path.exists() {
+                bail!(
+                    "error: no context exists with the name \"{}\"",
+                    target_context
+                );
+            }
+            path
+        };
+
+        // Load and parse target JSON
+        let mut target_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
+
+        // Get context name for history
+        let context_name = if target_context == "current" {
+            self.get_current_context()?
+                .unwrap_or_else(|| "current".to_string())
+        } else {
+            target_context.to_string()
+        };
+
+        // Perform full unmerge
+        let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        merge_manager.unmerge_full(&mut target_json, &context_name, source)?;
+
+        // Save updated target
+        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+
+        println!(
+            "✅ Removed all settings previously merged from '{}' in '{}'",
+            source.red(),
+            target_context.green().bold()
+        );
+
+        Ok(())
+    }
+
+    /// Display merge history for a context
+    pub fn show_merge_history(&self, context_name: Option<&str>) -> Result<()> {
+        let name = if let Some(n) = context_name {
+            n.to_string()
+        } else {
+            self.get_current_context()?
+                .ok_or_else(|| anyhow::anyhow!("error: no current context set"))?
+        };
+
+        let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        merge_manager.display_history(&name)?;
 
         Ok(())
     }
