@@ -181,12 +181,27 @@ To keep things simple, we've removed:
    # Or visit https://crates.io/me and click "New Token"
    ```
 2. **Add to GitHub repository secrets:**
+   
+   **Option A: Via GitHub Web UI**
    - Go to your repository on GitHub
    - Settings → Secrets and variables → Actions
    - Click "New repository secret"
    - Name: `CARGO_REGISTRY_TOKEN`
    - Value: Your crates.io API token
    - Click "Add secret"
+   
+   **Option B: Via GitHub CLI**
+   ```bash
+   # Install GitHub CLI if needed: https://cli.github.com
+   # First, save your token to a file (more secure than command line)
+   echo "YOUR_CRATES_IO_TOKEN" > ~/.cargo/crates-token
+   
+   # Add the secret to your repository
+   gh secret set CARGO_REGISTRY_TOKEN < ~/.cargo/crates-token
+   
+   # Clean up the token file
+   rm ~/.cargo/crates-token
+   ```
 
 **Key Settings:**
 - MSRV: Rust 1.81

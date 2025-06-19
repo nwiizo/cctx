@@ -481,10 +481,18 @@ To enable automatic publishing to crates.io:
    ```
 
 2. **Add to GitHub repository secrets:**
+   
+   **Web UI method:**
    - Go to Settings → Secrets and variables → Actions
    - Click "New repository secret"
    - Name: `CARGO_REGISTRY_TOKEN`
    - Value: Your crates.io API token
+   
+   **CLI method (using gh):**
+   ```bash
+   # Store token securely and add to repository
+   echo "YOUR_TOKEN" | gh secret set CARGO_REGISTRY_TOKEN
+   ```
 
 See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
 
