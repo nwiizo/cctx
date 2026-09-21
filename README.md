@@ -1,586 +1,262 @@
-# 🔄 cctx - Claude Context Switcher
+# cctx
 
-> [!IMPORTANT]
-> **Archived / アーカイブ済み**
->
-> I no longer use or actively maintain this project, so this repository is archived. If you would like to take over maintenance or continue the project, please DM [@nwiizo on X](https://x.com/nwiizo).
->
-> 現在、作者はこのツールを利用しておらず、積極的な保守も行っていないため、本リポジトリをアーカイブしました。保守を引き継ぎたい方・継続して活用したい方は、X の [@nwiizo](https://x.com/nwiizo) まで DM でご連絡ください。
+Manage Claude Code accounts and settings contexts. Each named account has its own
+Claude configuration directory; Claude Code handles login, credentials and refresh.
+Existing settings-context commands continue to work.
+Selecting an account never starts a Claude coding session. Run `claude` yourself.
 
-> ⚡ **Fast and intuitive** way to switch between Claude Code contexts (`~/.claude/settings.json`)
+## Everyday commands
 
-[![Crates.io](https://img.shields.io/crates/v/cctx)](https://crates.io/crates/cctx)
-[![CI](https://github.com/nwiizo/cctx/workflows/CI/badge.svg)](https://github.com/nwiizo/cctx/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.81%2B-orange.svg)](https://www.rust-lang.org/)
+| Task | Command |
+| --- | --- |
+| List account profiles | `cctx --accounts` |
+| Select the second account in this terminal | `cctx --account secondary` |
+| Return to the original account | `cctx --account default` |
+| Check the selected login | `claude auth status --text` |
+| Start Claude Code yourself | `claude` |
 
-**cctx** (Claude Context) is a kubectx-inspired command-line tool for managing multiple Claude Code configurations. Switch between different permission sets, environments, and settings with a single command.
+`cctx` uses flags, not subcommands: the account-list command is
+`cctx --accounts`, not `cctx list --account`. Running `cctx` without arguments
+lists saved **settings contexts**, not accounts. Account selection requires the
+shell integration below.
 
-## ✨ Features
+## Install
 
-- 🔀 **Instant context switching** - Switch between configurations in milliseconds
-- 🎯 **Predictable UX** - Default behavior always uses user-level contexts (no surprises!)
-- 🛡️ **Security-first** - Separate permissions for work, personal, and project contexts
-- 🎨 **Beautiful CLI** - Colorized output with helpful hints and visual indicators
-- 🚀 **Shell completions** - Tab completion for all major shells
-- 📦 **Zero dependencies** - Single binary, works everywhere
-- 🔄 **Previous context** - Quick switch back with `cctx -`
-- 📁 **File-based** - Simple JSON files you can edit manually
-- 🎭 **Kubectx-inspired** - Familiar UX for Kubernetes users
-- 💡 **Progressive disclosure** - Shows project/local contexts when available
-
-## 🚀 Quick Start
-
-### 📦 Installation
-
-**From crates.io (recommended):**
-```bash
-cargo install cctx
-```
-
-**From source:**
-```bash
+```sh
 git clone https://github.com/nwiizo/cctx.git
 cd cctx
-cargo install --path .
+cargo install --path . --locked
 ```
 
-**Pre-built binaries:**
-Download from [GitHub Releases](https://github.com/nwiizo/cctx/releases)
+Requires Rust 1.81 or later to build. Account commands require `claude` on PATH.
+The account workflow has been developed against Claude Code 2.1.278. The version
+published on crates.io may lag behind this checkout.
 
-### ⚡ 30-Second Setup
+To replace an existing installation with this checkout:
 
-```bash
-# 1. Create your first context from current settings
-cctx -n personal
-
-# 2. Create a restricted work context
-cctx -n work
-
-# 3. Switch between contexts
-cctx work      # Switch to work
-cctx personal  # Switch to personal  
-cctx -         # Switch back to previous
+```sh
+cargo install --path . --locked --force
+cctx --version
 ```
 
-## 🎯 Usage
+## Shell setup
 
-### 🔍 Basic Commands
+For Fish, add this to `~/.config/fish/config.fish`:
 
-```bash
-# List all contexts (current highlighted in green)
-cctx
-
-# Switch to a context
-cctx work
-
-# Switch to previous context  
-cctx -
-
-# Show current context
-cctx -c
-```
-
-### 🏗️ Settings Level Management
-
-cctx respects [Claude Code's settings hierarchy](https://docs.anthropic.com/en/docs/claude-code/settings) with a simple, predictable approach:
-
-1. **Enterprise policies** (highest priority)
-2. **Command-line arguments** 
-3. **Local project settings** (`./.claude/settings.local.json`)
-4. **Shared project settings** (`./.claude/settings.json`)
-5. **User settings** (`~/.claude/settings.json`) (lowest priority)
-
-```bash
-# Default: always uses user-level contexts (predictable)
-cctx                       # Manages ~/.claude/settings.json
-
-# Explicit flags for project/local contexts
-cctx --in-project          # Manages ./.claude/settings.json
-cctx --local               # Manages ./.claude/settings.local.json
-
-# All commands work with any level
-cctx --in-project work     # Switch to 'work' in project contexts
-cctx --local staging       # Switch to 'staging' in local contexts
-```
-
-### 🛠️ Context Management
-
-```bash
-# Create new context from current settings
-cctx -n project-alpha
-
-# Delete a context
-cctx -d old-project
-
-# Rename a context
-cctx -r old-name new-name
-
-# Edit context with $EDITOR
-cctx -e work
-
-# Show context content (JSON)
-cctx -s production
-
-# Unset current context
-cctx -u
-```
-
-### 📥📤 Import/Export
-
-```bash
-# Export context to file
-cctx --export production > prod-settings.json
-
-# Import context from file
-cctx --import staging < staging-settings.json
-
-# Share contexts between machines
-cctx --export work | ssh remote-host 'cctx --import work'
-```
-
-### 🔀 Merge Permissions
-
-Merge permissions from other contexts or files to build complex configurations:
-
-```bash
-# Merge user settings into current context
-cctx --merge-from user
-
-# Merge from another context
-cctx --merge-from personal work
-
-# Merge from a specific file
-cctx --merge-from /path/to/permissions.json staging
-
-# Remove previously merged permissions
-cctx --unmerge user
-
-# View merge history
-cctx --merge-history
-
-# Merge into a specific context (default is current)
-cctx --merge-from user production
-```
-
-**Merge Features:**
-- 📋 **Smart deduplication** - Prevents duplicate permissions
-- 📝 **History tracking** - See what was merged from where
-- 🔄 **Reversible** - Unmerge specific sources anytime
-- 🎯 **Granular control** - Target specific contexts
-
-### 🖥️ Shell Completions
-
-Enable tab completion for faster workflow:
-
-```bash
-# Bash
-cctx --completions bash > ~/.local/share/bash-completion/completions/cctx
-
-# Zsh  
-cctx --completions zsh > /usr/local/share/zsh/site-functions/_cctx
-
-# Fish
-cctx --completions fish > ~/.config/fish/completions/cctx.fish
-
-# PowerShell
-cctx --completions powershell > cctx.ps1
-```
-
-## 🏗️ File Structure
-
-Contexts are stored as individual JSON files at different levels:
-
-**🏠 User Level (`~/.claude/`):**
-```
-📁 ~/.claude/
-├── ⚙️ settings.json           # Active user context
-└── 📁 settings/
-    ├── 💼 work.json          # Work context  
-    ├── 🏠 personal.json      # Personal context
-    └── 🔒 .cctx-state.json   # State tracking
-```
-
-**📁 Project Level (`./.claude/`):**
-```
-📁 ./.claude/
-├── ⚙️ settings.json           # Shared project context
-├── 🔒 settings.local.json     # Local project context (gitignored)
-└── 📁 settings/
-    ├── 🚀 staging.json       # Staging context
-    ├── 🏭 production.json    # Production context
-    ├── 🔒 .cctx-state.json   # Project state
-    └── 🔒 .cctx-state.local.json # Local state
-```
-
-## 🎭 Interactive Mode
-
-When no arguments are provided, cctx enters interactive mode:
-
-- 🔍 **fzf integration** - Uses fzf if available for fuzzy search
-- 🎯 **Built-in finder** - Fallback fuzzy finder when fzf not installed
-- 🌈 **Color coding** - Current context highlighted in green
-- ⌨️ **Keyboard navigation** - Arrow keys and type-ahead search
-
-```bash
-# Interactive context selection
-cctx
-```
-
-## 💼 Common Workflows
-
-### 🏢 Professional Setup
-
-```bash
-# Create restricted work context for safer collaboration
-cctx -n work
-cctx -e work  # Edit to add restrictions:
-# - Read/Edit only in ~/work/** and current directory
-# - Deny: docker, kubectl, terraform, ssh, WebFetch, WebSearch
-# - Basic dev tools: git, npm, cargo, python only
-```
-
-### 🚀 Project-Based Contexts
-
-```bash
-# Create project-specific contexts
-cctx -n client-alpha    # For client work
-cctx -n side-project    # For personal projects  
-cctx -n experiments     # For trying new things
-
-# Switch based on current work
-cctx client-alpha       # Restricted permissions
-cctx experiments        # Full permissions for exploration
-```
-
-### 🔄 Daily Context Switching
-
-```bash
-# Morning: start with work context
-cctx work
-
-# Need full access for personal project  
-cctx personal
-
-# Quick switch back to work
-cctx -
-
-# Check current context anytime
-cctx -c
-```
-
-### 🛡️ Security-First Approach
-
-```bash
-# Default restricted context for screen sharing
-cctx work
-
-# Full permissions only when needed
-cctx personal
-
-# Project-specific minimal permissions
-cctx -n client-project
-# Configure: only access to ~/projects/client/** 
-```
-
-### 🎯 Settings Level Workflows
-
-**👤 User-Level Development:**
-```bash
-# Personal development with full permissions (default behavior)
-cctx personal
-
-# Work context with restrictions (default behavior)
-cctx work
-```
-
-**📁 Project-Level Collaboration:**
-```bash
-# Shared team settings (committed to git)
-cctx --in-project staging
-cctx --in-project production
-
-# Personal project overrides (gitignored)
-cctx --local development
-cctx --local debug
-```
-
-**🔄 Multi-Level Management:**
-```bash
-# Check current level (always shows helpful context)
-cctx                    # Shows: 👤 User contexts + hints for project/local if available
-
-# Switch levels in same directory
-cctx personal           # User level (default)
-cctx --in-project staging  # Project level  
-cctx --local debug      # Local level
-```
-
-## 🔧 Advanced Usage
-
-### 📝 Context Creation with Claude
-
-Use Claude Code to help create specialized contexts:
-
-```bash
-# Create production-safe context
-claude --model opus <<'EOF'
-Create a production.json context file with these restrictions:
-- Read-only access to most files
-- No docker/kubectl/terraform access  
-- No system file editing
-- Limited bash commands for safety
-- Based on my current ~/.claude/settings.json but secured
-EOF
-```
-
-### 🎨 Custom Context Templates
-
-```bash
-# Create template contexts for different scenarios
-cctx -n template-minimal     # Minimal permissions
-cctx -n template-dev         # Development tools only
-cctx -n template-ops         # Operations/deployment tools
-cctx -n template-restricted  # Screen-sharing safe
-```
-
-### 🔄 Context Synchronization
-
-```bash
-# Sync contexts across machines
-rsync -av ~/.claude/settings/ remote:~/.claude/settings/
-
-# Or use git for version control
-cd ~/.claude/settings
-git init && git add . && git commit -m "Initial contexts"
-git remote add origin git@github.com:user/claude-contexts.git
-git push -u origin main
-```
-
-## 🛡️ Security Best Practices
-
-### 🔒 Permission Isolation
-
-1. **🏢 Work context** - Restricted permissions for professional use
-2. **🏠 Personal context** - Full permissions for personal projects
-3. **📺 Demo context** - Ultra-restricted for screen sharing/demos
-4. **🧪 Testing context** - Isolated environment for experiments
-
-### 🎯 Context Strategy
-
-```bash
-# Create permission hierarchy
-cctx -n restricted   # No file write, no network, no system access
-cctx -n development  # File access to ~/dev/**, basic tools only  
-cctx -n full        # All permissions for personal use
-cctx -n demo        # Read-only, safe for presentations
-```
-
-### 🔍 Regular Audits
-
-```bash
-# Review context permissions regularly
-cctx -s work        # Check work context permissions
-cctx -s personal    # Review personal context
-cctx -s production  # Audit production context
-
-# Quick security check
-cctx -s restricted | grep -i "allow\|deny"
-```
-
-## 🎯 Tips & Tricks
-
-### ⚡ Productivity Boosters
-
-- 🔄 **Use `cctx -` frequently** - Quick toggle between two contexts
-- 🎯 **Trust the defaults** - `cctx` (no flags) handles 90% of use cases perfectly
-- 💡 **Follow the hints** - When cctx shows hints, they're contextually relevant
-- ⌨️ **Set up aliases** - `alias work='cctx work'`, `alias home='cctx personal'`
-- 📝 **Document your contexts** - Add comments in JSON for future reference
-
-### 🛠️ Environment Setup
-
-```bash
-# Add to your shell profile (~/.bashrc, ~/.zshrc)
-export EDITOR=code                    # For cctx -e
-alias cx='cctx'                      # Shorter command
-alias cxs='cctx -s'                  # Show context content
-alias cxc='cctx -c'                  # Show current context
-
-# Git hooks for automatic context switching
-# Pre-commit hook to ensure proper context
-#!/bin/bash
-if [[ $(cctx -c) != "work" ]]; then
-  echo "⚠️  Switching to work context for this repo"
-  cctx work
-fi
-```
-
-### 🔧 Integration Examples
-
-```bash
-# Tmux integration - show context in status bar
-set -g status-right "Context: #(cctx -c) | %H:%M"
-
-# VS Code integration - add to settings.json
-"terminal.integrated.env.osx": {
-  "CLAUDE_CONTEXT": "$(cctx -c 2>/dev/null || echo 'none')"
-}
-
-# Fish shell prompt integration
-function fish_prompt
-    set_color cyan
-    echo -n (cctx -c 2>/dev/null || echo 'no-context')
-    set_color normal
-    echo -n '> '
+```fish
+if status is-interactive; and command -sq cctx
+    cctx --shell-init fish | source
 end
 ```
 
-## 🔧 Development & Release Tools
+Open a new terminal to load it. To enable it in an already open Fish session,
+run `cctx --shell-init fish | source` once.
 
-This project includes comprehensive automation tools:
-
-### 🚀 Release Management
-
-**Simple One-Command Release:**
-```bash
-# Automatic release with all quality checks
-./quick-release.sh patch      # 0.1.0 -> 0.1.1
-./quick-release.sh minor      # 0.1.0 -> 0.2.0
-./quick-release.sh major      # 0.1.0 -> 1.0.0
-```
-
-The script automatically:
-- ✅ Runs quality checks (fmt, clippy, test, build)
-- ✅ Updates version in Cargo.toml
-- ✅ Creates git commit and tag
-- ✅ Pushes to GitHub
-- ✅ Triggers GitHub Actions for binary builds and crates.io publishing
-
-### 🛠️ Development Tasks
+For Bash, add this to `~/.bashrc`:
 
 ```bash
-# Using justfile (install: cargo install just)
-just check              # Run all quality checks
-just release-patch      # Same as ./quick-release.sh patch
-just setup              # Setup development environment
-just audit              # Security audit
-just completions fish   # Generate shell completions
+eval "$(cctx --shell-init bash)"
 ```
 
-## 🤝 Contributing
+For Zsh, add `eval "$(cctx --shell-init zsh)"` to `~/.zshrc`.
 
-We welcome contributions! This project includes:
+## Accounts
 
-- 🔄 **Automated CI/CD** - GitHub Actions for testing and releases
-- 🧪 **Quality gates** - Formatting, linting, and tests required
-- 📦 **Multi-platform** - Builds for Linux, macOS, and Windows
-- 🚀 **Auto-releases** - Semantic versioning with automated publishing
+The existing Claude login is available as `default`; there is no need to create
+or log in to that profile again. Create another profile and log in once:
 
-### 🔑 Setting up crates.io Publishing (Maintainers)
+```sh
+# Keep your existing Claude login as default
+cctx --account default --status
 
-To enable automatic publishing to crates.io:
+# Set up a second login once
+cctx --add-account secondary
+cctx --account secondary --login
+cctx --account secondary --status
 
-1. **Get your crates.io API token:**
-   ```bash
-   cargo login  # Opens browser to get token
-   # Or visit https://crates.io/me → New Token
-   ```
+# Select a login for this terminal, then launch Claude separately
+cctx --account secondary
+claude
+# After exiting Claude, switch back
+cctx --account default
+claude
 
-2. **Add to GitHub repository secrets:**
-   
-   **Web UI method:**
-   - Go to Settings → Secrets and variables → Actions
-   - Click "New repository secret"
-   - Name: `CARGO_REGISTRY_TOKEN`
-   - Value: Your crates.io API token
-   
-   **CLI method (using gh):**
-   ```bash
-   # Store token securely and add to repository
-   echo "YOUR_TOKEN" | gh secret set CARGO_REGISTRY_TOKEN
-   ```
+# Claude commands work normally with the selected account
+claude --continue
+claude --resume SESSION_ID
+claude --model sonnet -p 'Explain this project'
 
-See [CLAUDE.md](CLAUDE.md) for detailed development guidelines.
+# Inspect profiles or sign out of just one
+cctx --accounts
+cctx --account secondary --account-path
+cctx --account secondary --logout
+```
 
-## 📄 License
+Names are local labels, not email addresses. `--accounts` lists directories, not
+verified login identities; `--status` asks Claude Code for the actual account.
+For example, after creating `secondary`, `cctx --accounts` lists `default` at
+`~/.claude` and `secondary` at `~/.cctx/accounts/secondary` (as absolute paths).
+Use `cctx --account secondary --status` to inspect that profile without changing
+the current shell's selection. The same applies to `--login`, `--logout` and
+settings operations: only `cctx --account NAME` on its own selects an account.
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Selection affects only the current shell and future child processes. Other terminals
+and already running Claude sessions keep their account. A new terminal starts with
+its inherited environment; no account selection is persisted globally. The binary
+alone cannot modify its parent shell, so account switching requires the shell function.
 
-## 📖 Complete Command Reference
+`default` restores the original Claude configuration by **unsetting**
+`CLAUDE_CONFIG_DIR`. Setting it explicitly to `~/.claude` is not equivalent: Claude
+Code 2.1.278 then looks for a different global state file and Keychain namespace.
+Named profiles live in `~/.cctx/accounts/NAME`; `CCTX_HOME` overrides `~/.cctx`. Profile paths are
+canonicalized before selection because macOS Keychain entries depend on
+the configuration directory. Do not move or rename a logged-in profile directory.
+New profiles are empty: credentials, history, settings and plugins are never copied.
+`claude --continue` and `claude --resume` therefore use the selected account's
+history; switching accounts does not transfer an existing conversation.
+On Unix, newly created account directories have mode `0700`.
 
-### Basic Operations
-- `cctx` - List contexts (defaults to user-level)
-- `cctx <name>` - Switch to context
-- `cctx -` - Switch to previous context
-- `cctx -c` - Show current context name
-- `cctx -q` - Quiet mode (only show current context)
+When inherited API keys, OAuth tokens, Anthropic profile selectors or cloud-provider
+selectors could override the account, cctx stops and names the variables without
+printing their values. Settings files, managed policies and gateways are still
+interpreted by Claude Code; check `--status` before using sensitive projects.
+Project settings remain associated with the project and are not isolated by account.
 
-### Context Management
-- `cctx -n <name>` - Create new context from current settings
-- `cctx -d <name>` - Delete context (interactive if no name)
-- `cctx -r <old> <new>` - Rename context
-- `cctx -e [name]` - Edit context with $EDITOR
-- `cctx -s [name]` - Show context content (JSON)
-- `cctx -u` - Unset current context (removes settings file)
+For convenience, add shell aliases yourself:
 
-### Import/Export
-- `cctx --export [name]` - Export context to stdout
-- `cctx --import <name>` - Import context from stdin
+```sh
+alias cc-work='cctx --account default'
+alias cc-secondary='cctx --account secondary'
+```
 
-### Merge Operations
-- `cctx --merge-from <source> [target]` - Merge permissions from source into target (default: current)
-  - Source can be: `user`, another context name, or file path
-- `cctx --merge-from <source> --merge-full [target]` - Merge ALL settings (not just permissions)
-- `cctx --unmerge <source> [target]` - Remove previously merged permissions
-- `cctx --unmerge <source> --merge-full [target]` - Remove ALL previously merged settings
-- `cctx --merge-history [name]` - Show merge history for context
+To retire a profile, use `--logout` first. cctx deliberately has no recursive
+profile-delete command: conversation history and settings stay available for backup.
 
-### Settings Levels
-- `cctx` - User-level contexts (default: `~/.claude/settings.json`)
-- `cctx --in-project` - Project-level contexts (`./.claude/settings.json`)
-- `cctx --local` - Local project contexts (`./.claude/settings.local.json`)
+## Settings contexts
 
-### Other Options
-- `cctx --completions <shell>` - Generate shell completions
-- `cctx --help` - Show help information
-- `cctx --version` - Show version information
+A context is a saved `settings.json`, independent of your login identity.
+The original context commands are retained: `cctx work` activates settings named
+`work`, while `cctx --account work` selects an account profile named `work`.
 
-## 🎯 Design Philosophy (v0.1.1+)
+```sh
+cctx -n personal                 # Save current settings (or {} if absent)
+cctx -n work
+cctx work                       # Activate saved settings
+cctx -                          # Return to previous context
+cctx                            # List contexts
+cctx -c                         # Print current name
+cctx -r work restricted          # Rename; prompts if new name is omitted
+cctx -e restricted               # Edit with EDITOR, VISUAL, or vi
+cctx -s restricted               # Show JSON
+cctx -d personal                 # Delete an inactive context
+cctx -u                         # Remove active settings; keep saved contexts
 
-**cctx follows the principle of "Predictable defaults with explicit overrides":**
+# Apply the same operations inside one account
+cctx --account secondary -n restricted
+cctx --account secondary restricted
 
-- 🎯 **Default behavior is always the same** - uses user-level contexts (`~/.claude/settings.json`)
-- 💡 **Helpful discovery** - shows hints when project/local contexts are available
-- 🚀 **Simple when simple** - 90% of usage needs zero flags
-- 🔧 **Explicit when needed** - `--in-project` and `--local` for specific cases
+# Explicit project scopes (cannot be combined with --account)
+cctx --in-project -n staging     # ./.claude/settings.json
+cctx --local -n development      # ./.claude/settings.local.json
+```
 
-This approach eliminates surprises and cognitive overhead while maintaining full functionality.
+User contexts live in `settings/` inside the selected Claude directory. Existing
+`~/.claude/settings/*.json`, `.cctx-state.json` and merge-history files retain their
+formats. Project and local scopes retain the existing shared `./.claude/settings/`
+context library and separate state files.
 
-## ⚠️ Compatibility Notice
+Names must be visible filenames without path separators or platform-reserved
+characters. Hidden names and `-` are reserved. Activating or importing invalid JSON
+or a non-object JSON value fails before replacing settings. Individual file writes
+use temporary files and atomic replacement; a settings file plus its state/history
+file are **not** a single transaction. Avoid concurrent settings edits within the
+same profile. Separate accounts can run concurrently.
 
-**cctx** is designed to work with [Claude Code](https://github.com/anthropics/claude-code) configuration files. As Claude Code is actively developed by Anthropic, configuration formats and file structures may change over time.
+Use `CCTX_INTERACTIVE=1 cctx` for interactive selection (`fzf` when available,
+otherwise the built-in fuzzy selector). With no environment override, cctx lists
+contexts. `-q` prints only the current context name.
 
-**We are committed to maintaining compatibility:**
-- 🔄 **Active monitoring** of Claude Code updates and changes
-- 🚀 **Prompt updates** when configuration formats change
-- 🛠️ **Backward compatibility** whenever possible
-- 📢 **Clear migration guides** for breaking changes
+## Import, export and merge
 
-If you encounter compatibility issues after a Claude Code update, please [open an issue](https://github.com/nwiizo/cctx/issues) and we'll address it promptly.
+```sh
+cctx --export restricted > restricted.json
+cctx --import staging < restricted.json
+cctx --merge-from restricted staging
+cctx --merge-from ./extra.json --merge-full staging
+cctx --merge-history staging
+cctx --unmerge ./extra.json --merge-full staging
+```
 
-## 🙏 Acknowledgments
+The source is `user` (the selected account's active settings), a context name, or a
+path ending in `.json`. Omitting the target operates on the active settings file;
+an explicit target changes the saved context. Activate that context to use it.
 
-- 🎯 Inspired by [kubectx](https://github.com/ahmetb/kubectx) - the amazing Kubernetes context switcher
-- 🤖 Built for [Claude Code](https://claude.ai/code) - Anthropic's CLI for Claude
-- 🦀 Powered by [Rust](https://www.rust-lang.org/) - fast, safe, and beautiful
+Permission merges add unique `allow`, `deny` and `ask` rules while preserving their
+order. Full merges also add absent environment variables and top-level settings;
+existing values win. Other fields within `permissions` are not merged.
+History records additions, not complete snapshots. Unmerge removes recorded
+additions; it does not reconstruct later manual edits. Permission-only unmerge
+leaves full-merge entries available for a later `--unmerge --merge-full`.
 
----
+## Completion
 
-<div align="center">
+```sh
+cctx --completions zsh > _cctx
+cctx --completions bash > cctx.bash
+cctx --completions fish > cctx.fish
+```
 
-**⭐ Star this repo if cctx makes your Claude Code workflow better!**
+PowerShell and Elvish are also supported. Options are generated from the CLI
+definition, and context candidates reflect the configuration directory at generation
+time. Regenerate after changing saved contexts.
 
-[🐛 Report Bug](https://github.com/nwiizo/cctx/issues) • [💡 Request Feature](https://github.com/nwiizo/cctx/issues) • [💬 Discussions](https://github.com/nwiizo/cctx/discussions)
+## Claude Code compatibility
 
-</div>
+The current integration uses these official interfaces:
+
+| Claude Code capability | cctx usage |
+| --- | --- |
+| Directory-scoped credentials and state | `--account NAME` changes `CLAUDE_CONFIG_DIR` in the current shell |
+| Login, logout, identity | `--login`, `--logout`, `--status` delegate to `claude auth` |
+| Resume a conversation | Select the account, then `claude --continue` or `claude --resume ID` |
+| MCP servers and plugins | Select the account, then `claude mcp ...` or `claude plugin ...` |
+| Worktrees, model, effort, safe mode | Use Claude's own flags when starting it |
+
+No credential extraction, undocumented quota polling, automatic account rotation,
+or cross-account transcript copying is used.
+
+Sources: [environment variables](https://code.claude.com/docs/en/env-vars),
+[authentication](https://code.claude.com/docs/en/authentication),
+[CLI reference](https://code.claude.com/docs/en/cli-reference),
+[2.1.278 release](https://github.com/anthropics/claude-code/releases/tag/v2.1.278).
+
+## Development
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all --all-targets
+cargo build --release --locked
+cargo audit
+```
+
+CLI tests isolate HOME, USERPROFILE, CCTX_HOME and CLAUDE_CONFIG_DIR in temporary
+directories. Unix authentication tests use a controlled executable to check
+directory isolation and child exit codes without accessing a real login. Shell tests
+check account selection, failed-selection rollback, default restoration and that
+selection never starts Claude.
+See [docs/e2e.md](docs/e2e.md) for real Claude Code verification.
+
+The macOS/Fish workflow was verified with two real accounts on Claude Code
+2.1.278: `default → secondary → default` restored the expected identities, and
+both accounts returned a response through plain `claude`. To repeat this check
+after authenticating both accounts and installing this checkout:
+
+```sh
+cargo test --test claude_e2e -- --ignored --nocapture
+```
+
+This opt-in test makes a small model request under each account and consumes
+usage. It is excluded from ordinary test runs.
+
+MIT license. Inspired by kubectx.

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct State {
@@ -10,7 +10,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn load(state_path: &PathBuf) -> Result<Self> {
+    pub fn load(state_path: &Path) -> Result<Self> {
         if state_path.exists() {
             let content = fs::read_to_string(state_path)?;
             Ok(serde_json::from_str(&content)?)
@@ -19,9 +19,9 @@ impl State {
         }
     }
 
-    pub fn save(&self, state_path: &PathBuf) -> Result<()> {
+    pub fn save(&self, state_path: &Path) -> Result<()> {
         let content = serde_json::to_string_pretty(self)?;
-        fs::write(state_path, content)?;
+        crate::storage::atomic_write(state_path, content)?;
         Ok(())
     }
 

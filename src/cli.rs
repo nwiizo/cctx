@@ -5,9 +5,55 @@ use clap_complete::Shell;
 #[command(name = "cctx")]
 #[command(about = "Claude Code context switcher", version)]
 #[command(author, long_about = None)]
+#[command(group(clap::ArgGroup::new("merge_operation").args(["merge_from", "unmerge"])))]
+#[command(group(clap::ArgGroup::new("operation").args([
+    "delete", "current", "rename", "new", "edit", "show", "export", "import",
+    "unset", "completions", "merge_from", "unmerge", "merge_history",
+    "add_account", "accounts", "account_path", "shell_path", "shell_init", "login", "status", "logout"
+])))]
 pub struct Cli {
     /// Context name to switch to, or '-' to switch to previous context
     pub context: Option<String>,
+
+    /// New name when using --rename OLD NEW
+    #[arg(requires = "rename")]
+    pub new_name: Option<String>,
+
+    /// Select an account, or scope a settings/authentication operation to it
+    #[arg(long, conflicts_with_all = ["in_project", "local", "add_account", "accounts", "completions", "shell_init"])]
+    pub account: Option<String>,
+
+    /// Create an empty account profile; does not copy credentials or settings
+    #[arg(long, conflicts_with_all = ["context", "in_project", "local"])]
+    pub add_account: Option<String>,
+
+    /// List account names and their configuration directories
+    #[arg(long, conflicts_with_all = ["context", "in_project", "local"])]
+    pub accounts: bool,
+
+    /// Print the selected account's configuration directory
+    #[arg(long, requires = "account", conflicts_with = "context")]
+    pub account_path: bool,
+
+    /// Log in using Claude Code in the selected account
+    #[arg(long, requires = "account", conflicts_with = "context")]
+    pub login: bool,
+
+    /// Show the selected account's authentication status using Claude Code
+    #[arg(long, requires = "account", conflicts_with = "context")]
+    pub status: bool,
+
+    /// Log out of the selected account using Claude Code
+    #[arg(long, requires = "account", conflicts_with = "context")]
+    pub logout: bool,
+
+    /// Print shell integration for fish, bash or zsh
+    #[arg(long, conflicts_with_all = ["context", "in_project", "local"])]
+    pub shell_init: Option<Shell>,
+
+    /// Internal: validated configuration path for shell selection
+    #[arg(long, hide = true, requires = "account", conflicts_with = "context")]
+    pub shell_path: bool,
 
     /// Delete context mode
     #[arg(short = 'd', long = "delete")]
@@ -54,7 +100,7 @@ pub struct Cli {
     pub quiet: bool,
 
     /// Manage project-level contexts (./.claude/settings.json)
-    #[arg(long = "in-project")]
+    #[arg(long = "in-project", conflicts_with = "local")]
     pub in_project: bool,
 
     /// Manage local project contexts (./.claude/settings.local.json)
@@ -74,6 +120,6 @@ pub struct Cli {
     pub merge_history: bool,
 
     /// Merge all settings (not just permissions) from source
-    #[arg(long = "merge-full")]
+    #[arg(long = "merge-full", requires = "merge_operation")]
     pub merge_full: bool,
 }

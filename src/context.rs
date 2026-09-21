@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use colored::*;
 use std::fs;
 use std::path::PathBuf;
@@ -6,6 +6,7 @@ use std::process::Command;
 
 use crate::merge::MergeManager;
 use crate::state::State;
+use crate::storage::{atomic_write, read_settings, validate_name, validate_settings};
 
 #[derive(Debug, Clone)]
 pub enum SettingsLevel {
@@ -19,6 +20,7 @@ pub struct ContextManager {
     pub claude_settings_path: PathBuf,
     pub state_path: PathBuf,
     pub settings_level: SettingsLevel,
+    user_config_dir: PathBuf,
 }
 
 impl ContextManager {
@@ -27,12 +29,15 @@ impl ContextManager {
     }
 
     pub fn new_with_level(level: SettingsLevel) -> Result<Self> {
-        let home_dir = dirs::home_dir().context("Failed to get home directory")?;
+        Self::with_config_dir(level, crate::account::default_config_dir()?)
+    }
+
+    pub fn with_config_dir(level: SettingsLevel, user_config_dir: PathBuf) -> Result<Self> {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         let (claude_settings_path, contexts_dir, state_path) = match level {
             SettingsLevel::User => {
-                let claude_dir = home_dir.join(".claude");
+                let claude_dir = &user_config_dir;
                 let contexts_dir = claude_dir.join("settings");
                 let claude_settings_path = claude_dir.join("settings.json");
                 let state_path = contexts_dir.join(".cctx-state.json");
@@ -62,6 +67,7 @@ impl ContextManager {
             claude_settings_path,
             state_path,
             settings_level: level,
+            user_config_dir,
         })
     }
 
@@ -94,8 +100,9 @@ impl ContextManager {
             .exists()
     }
 
-    pub fn context_path(&self, name: &str) -> PathBuf {
-        self.contexts_dir.join(format!("{name}.json"))
+    pub fn context_path(&self, name: &str) -> Result<PathBuf> {
+        validate_name(name)?;
+        Ok(self.contexts_dir.join(format!("{name}.json")))
     }
 
     fn load_state(&self) -> Result<State> {
@@ -148,15 +155,15 @@ impl ContextManager {
         state.set_current(name.to_string());
 
         // Copy context settings to Claude settings
-        let context_path = self.context_path(name);
-        let content = fs::read_to_string(&context_path)?;
+        let context_path = self.context_path(name)?;
+        let content = read_settings(&context_path)?;
 
         // Create .claude directory if it doesn't exist
         if let Some(parent) = self.claude_settings_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        fs::write(&self.claude_settings_path, content)?;
+        atomic_write(&self.claude_settings_path, content)?;
         self.save_state(&state)?;
 
         println!("Switched to context \"{}\"", name.green().bold());
@@ -176,20 +183,18 @@ impl ContextManager {
     }
 
     pub fn create_context(&self, name: &str) -> Result<()> {
-        if name.is_empty() || name == "-" || name == "." || name == ".." || name.contains('/') {
-            bail!("error: invalid context name \"{}\"", name);
-        }
+        validate_name(name)?;
 
         let contexts = self.list_contexts()?;
         if contexts.contains(&name.to_string()) {
             bail!("error: context \"{}\" already exists", name);
         }
 
-        let context_path = self.context_path(name);
+        let context_path = self.context_path(name)?;
 
         if self.claude_settings_path.exists() {
             // Copy current Claude settings
-            fs::copy(&self.claude_settings_path, &context_path)?;
+            atomic_write(&context_path, read_settings(&self.claude_settings_path)?)?;
             println!(
                 "Context \"{}\" created from current settings",
                 name.green().bold()
@@ -197,7 +202,7 @@ impl ContextManager {
         } else {
             // Create empty settings
             let empty_settings = serde_json::json!({});
-            fs::write(
+            atomic_write(
                 &context_path,
                 serde_json::to_string_pretty(&empty_settings)?,
             )?;
@@ -214,7 +219,7 @@ impl ContextManager {
             bail!("error: cannot delete the active context \"{}\"", name);
         }
 
-        let context_path = self.context_path(name);
+        let context_path = self.context_path(name)?;
         if !context_path.exists() {
             bail!("error: no context exists with the name \"{}\"", name);
         }
@@ -233,14 +238,7 @@ impl ContextManager {
     }
 
     pub fn rename_context(&self, old_name: &str, new_name: &str) -> Result<()> {
-        if new_name.is_empty()
-            || new_name == "-"
-            || new_name == "."
-            || new_name == ".."
-            || new_name.contains('/')
-        {
-            bail!("error: invalid context name \"{}\"", new_name);
-        }
+        validate_name(new_name)?;
 
         let contexts = self.list_contexts()?;
         if !contexts.contains(&old_name.to_string()) {
@@ -251,12 +249,21 @@ impl ContextManager {
             bail!("error: context \"{}\" already exists", new_name);
         }
 
-        let old_path = self.context_path(old_name);
-        let new_path = self.context_path(new_name);
+        let old_path = self.context_path(old_name)?;
+        let new_path = self.context_path(new_name)?;
+        let history = MergeManager::new(self.contexts_dir.clone());
+        let old_history = history.history_path(old_name)?;
+        let new_history = history.history_path(new_name)?;
+        if new_history.exists() {
+            bail!("merge history already exists for {new_name:?}");
+        }
+        let mut state = self.load_state()?;
         fs::rename(old_path, new_path)?;
+        if old_history.exists() {
+            fs::rename(old_history, new_history)?;
+        }
 
         // Update state if needed
-        let mut state = self.load_state()?;
         let mut updated = false;
 
         if state.current.as_ref() == Some(&old_name.to_string()) {
@@ -282,7 +289,7 @@ impl ContextManager {
     }
 
     pub fn show_context(&self, name: &str) -> Result<()> {
-        let context_path = self.context_path(name);
+        let context_path = self.context_path(name)?;
         if !context_path.exists() {
             bail!("error: no context exists with the name \"{}\"", name);
         }
@@ -296,7 +303,7 @@ impl ContextManager {
     }
 
     pub fn edit_context(&self, name: &str) -> Result<()> {
-        let context_path = self.context_path(name);
+        let context_path = self.context_path(name)?;
         if !context_path.exists() {
             bail!("error: no context exists with the name \"{}\"", name);
         }
@@ -315,7 +322,7 @@ impl ContextManager {
     }
 
     pub fn export_context(&self, name: &str) -> Result<()> {
-        let context_path = self.context_path(name);
+        let context_path = self.context_path(name)?;
         if !context_path.exists() {
             bail!("error: no context exists with the name \"{}\"", name);
         }
@@ -326,9 +333,7 @@ impl ContextManager {
     }
 
     pub fn import_context(&self, name: &str) -> Result<()> {
-        if name.is_empty() || name == "-" || name == "." || name == ".." || name.contains('/') {
-            bail!("error: invalid context name \"{}\"", name);
-        }
+        validate_name(name)?;
 
         let contexts = self.list_contexts()?;
         if contexts.contains(&name.to_string()) {
@@ -340,22 +345,21 @@ impl ContextManager {
         std::io::stdin().read_to_string(&mut buffer)?;
 
         // Validate JSON
-        let _: serde_json::Value =
-            serde_json::from_str(&buffer).context("error: invalid JSON input")?;
+        validate_settings(&buffer)?;
 
-        let context_path = self.context_path(name);
-        fs::write(&context_path, buffer)?;
+        let context_path = self.context_path(name)?;
+        atomic_write(&context_path, buffer)?;
 
         println!("Context \"{}\" imported", name.green().bold());
         Ok(())
     }
 
     pub fn unset_context(&self) -> Result<()> {
+        let mut state = self.load_state()?;
         if self.claude_settings_path.exists() {
             fs::remove_file(&self.claude_settings_path)?;
         }
 
-        let mut state = self.load_state()?;
         if let Some(_current) = state.unset_current() {
             self.save_state(&state)?;
         }
@@ -427,72 +431,58 @@ impl ContextManager {
         Ok(())
     }
 
-    /// Merge permissions from another context or settings file
-    pub fn merge_from(&self, target_context: &str, source: &str) -> Result<()> {
-        // Load target context
-        let target_path = if target_context == "current" {
+    fn merge_target(&self, target_context: &str) -> Result<(PathBuf, String)> {
+        if target_context == "current" {
             if !self.claude_settings_path.exists() {
                 bail!("error: no current context is set");
             }
-            self.claude_settings_path.clone()
+            Ok((
+                self.claude_settings_path.clone(),
+                self.get_current_context()?
+                    .unwrap_or_else(|| "current".to_string()),
+            ))
         } else {
-            let path = self.context_path(target_context);
+            let path = self.context_path(target_context)?;
             if !path.exists() {
                 bail!(
                     "error: no context exists with the name \"{}\"",
                     target_context
                 );
             }
-            path
-        };
+            Ok((path, target_context.to_string()))
+        }
+    }
 
-        // Load source settings
-        let source_content = if source == "user" {
-            // Merge from user-level settings.json
-            let home_dir = dirs::home_dir().context("Failed to get home directory")?;
-            let user_settings = home_dir.join(".claude").join("settings.json");
-            if !user_settings.exists() {
-                bail!("error: user settings file not found at {:?}", user_settings);
-            }
-            fs::read_to_string(&user_settings)?
+    fn merge_source(&self, source: &str) -> Result<String> {
+        let path = if source == "user" {
+            self.user_config_dir.join("settings.json")
         } else if source.ends_with(".json") {
-            // Merge from a file path
-            let source_path = PathBuf::from(source);
-            if !source_path.exists() {
-                bail!("error: source file not found at {:?}", source_path);
-            }
-            fs::read_to_string(&source_path)?
+            PathBuf::from(source)
         } else {
-            // Merge from another context
-            let source_path = self.context_path(source);
-            if !source_path.exists() {
-                bail!("error: no context exists with the name \"{}\"", source);
-            }
-            fs::read_to_string(&source_path)?
+            self.context_path(source)?
         };
+        read_settings(&path)
+    }
 
+    /// Merge permissions from another context or settings file
+    pub fn merge_from(&self, target_context: &str, source: &str) -> Result<()> {
+        let (target_path, context_name) = self.merge_target(target_context)?;
+        let source_content = self.merge_source(source)?;
         // Parse JSON
         let mut target_json: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
+            serde_json::from_str(&read_settings(&target_path)?)?;
         let source_json: serde_json::Value = serde_json::from_str(&source_content)?;
 
         // Perform merge
         let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        let mut history = merge_manager.load_history(&context_name)?;
         let history_entry =
             merge_manager.merge_permissions(&mut target_json, &source_json, source)?;
 
         // Save updated target
-        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
 
         // Update history
-        let context_name = if target_context == "current" {
-            self.get_current_context()?
-                .unwrap_or_else(|| "current".to_string())
-        } else {
-            target_context.to_string()
-        };
-
-        let mut history = merge_manager.load_history(&context_name)?;
         history.push(history_entry.clone());
         merge_manager.save_history(&context_name, &history)?;
 
@@ -520,41 +510,18 @@ impl ContextManager {
 
     /// Remove previously merged permissions
     pub fn unmerge_from(&self, target_context: &str, source: &str) -> Result<()> {
-        // Load target context
-        let target_path = if target_context == "current" {
-            if !self.claude_settings_path.exists() {
-                bail!("error: no current context is set");
-            }
-            self.claude_settings_path.clone()
-        } else {
-            let path = self.context_path(target_context);
-            if !path.exists() {
-                bail!(
-                    "error: no context exists with the name \"{}\"",
-                    target_context
-                );
-            }
-            path
-        };
+        let (target_path, context_name) = self.merge_target(target_context)?;
 
         // Load and parse target JSON
         let mut target_json: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
-
-        // Get context name for history
-        let context_name = if target_context == "current" {
-            self.get_current_context()?
-                .unwrap_or_else(|| "current".to_string())
-        } else {
-            target_context.to_string()
-        };
+            serde_json::from_str(&read_settings(&target_path)?)?;
 
         // Perform unmerge
         let merge_manager = MergeManager::new(self.contexts_dir.clone());
         merge_manager.unmerge_permissions(&mut target_json, &context_name, source)?;
 
         // Save updated target
-        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
 
         println!(
             "✅ Removed all permissions previously merged from '{}' in '{}'",
@@ -567,69 +534,23 @@ impl ContextManager {
 
     /// Merge all settings from another context or settings file (full merge)
     pub fn merge_from_full(&self, target_context: &str, source: &str) -> Result<()> {
-        // Load target context
-        let target_path = if target_context == "current" {
-            if !self.claude_settings_path.exists() {
-                bail!("error: no current context is set");
-            }
-            self.claude_settings_path.clone()
-        } else {
-            let path = self.context_path(target_context);
-            if !path.exists() {
-                bail!(
-                    "error: no context exists with the name \"{}\"",
-                    target_context
-                );
-            }
-            path
-        };
-
-        // Load source settings
-        let source_content = if source == "user" {
-            // Merge from user-level settings.json
-            let home_dir = dirs::home_dir().context("Failed to get home directory")?;
-            let user_settings = home_dir.join(".claude").join("settings.json");
-            if !user_settings.exists() {
-                bail!("error: user settings file not found at {:?}", user_settings);
-            }
-            fs::read_to_string(&user_settings)?
-        } else if source.ends_with(".json") {
-            // Merge from a file path
-            let source_path = PathBuf::from(source);
-            if !source_path.exists() {
-                bail!("error: source file not found at {:?}", source_path);
-            }
-            fs::read_to_string(&source_path)?
-        } else {
-            // Merge from another context
-            let source_path = self.context_path(source);
-            if !source_path.exists() {
-                bail!("error: no context exists with the name \"{}\"", source);
-            }
-            fs::read_to_string(&source_path)?
-        };
+        let (target_path, context_name) = self.merge_target(target_context)?;
+        let source_content = self.merge_source(source)?;
 
         // Parse JSON
         let mut target_json: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
+            serde_json::from_str(&read_settings(&target_path)?)?;
         let source_json: serde_json::Value = serde_json::from_str(&source_content)?;
 
         // Perform full merge
         let merge_manager = MergeManager::new(self.contexts_dir.clone());
+        let mut history = merge_manager.load_history(&context_name)?;
         let history_entry = merge_manager.merge_full(&mut target_json, &source_json, source)?;
 
         // Save updated target
-        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
 
         // Update history
-        let context_name = if target_context == "current" {
-            self.get_current_context()?
-                .unwrap_or_else(|| "current".to_string())
-        } else {
-            target_context.to_string()
-        };
-
-        let mut history = merge_manager.load_history(&context_name)?;
         history.push(history_entry.clone());
         merge_manager.save_history(&context_name, &history)?;
 
@@ -675,41 +596,18 @@ impl ContextManager {
 
     /// Remove all settings that were previously merged from a specific source (full unmerge)
     pub fn unmerge_from_full(&self, target_context: &str, source: &str) -> Result<()> {
-        // Load target context
-        let target_path = if target_context == "current" {
-            if !self.claude_settings_path.exists() {
-                bail!("error: no current context is set");
-            }
-            self.claude_settings_path.clone()
-        } else {
-            let path = self.context_path(target_context);
-            if !path.exists() {
-                bail!(
-                    "error: no context exists with the name \"{}\"",
-                    target_context
-                );
-            }
-            path
-        };
+        let (target_path, context_name) = self.merge_target(target_context)?;
 
         // Load and parse target JSON
         let mut target_json: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&target_path)?)?;
-
-        // Get context name for history
-        let context_name = if target_context == "current" {
-            self.get_current_context()?
-                .unwrap_or_else(|| "current".to_string())
-        } else {
-            target_context.to_string()
-        };
+            serde_json::from_str(&read_settings(&target_path)?)?;
 
         // Perform full unmerge
         let merge_manager = MergeManager::new(self.contexts_dir.clone());
         merge_manager.unmerge_full(&mut target_json, &context_name, source)?;
 
         // Save updated target
-        fs::write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
+        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
 
         println!(
             "✅ Removed all settings previously merged from '{}' in '{}'",
