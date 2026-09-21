@@ -4,27 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-cctx is a kubectx-style CLI (Rust edition 2024, MSRV 1.85, single binary crate with `src/main.rs` as the only entry point) that switches Claude Code `settings.json` files ("contexts") and selects isolated account profiles through shell integration. Account selection must not start a coding session. The public repository is no longer archived. Keep changes small and scoped to what is asked.
+cctx is a kubectx-style CLI (Rust edition 2024, MSRV 1.85, single binary crate with `src/main.rs` as the only entry point) that switches Claude Code `settings.json` files ("contexts") and selects isolated account profiles through shell integration. Account selection must not start a coding session. It is published on crates.io as `cctx` and as prebuilt binaries on GitHub Releases; 0.2.0 is the first release with accounts. Keep changes small and scoped to what is asked.
 
 ## Commands
 
 ```bash
-cargo build --release
+just check                                                  # fmt --check, clippy, tests, release build, all --locked; identical to the CI gate
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings   # CI form; `just check` runs `cargo clippy -- -D warnings`
-cargo test                                                  # all tests live in tests/cli.rs (no unit tests)
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --all-targets --locked                           # all tests live in tests/cli.rs (no unit tests)
 cargo test --test cli accounts_isolate                      # one integration test by name prefix
-cargo test --test claude_e2e -- --ignored                   # opt-in E2E against real logins; see docs/e2e.md
+cargo test --test claude_e2e -- --ignored                   # opt-in E2E against two real logins; see docs/e2e.md
+cargo build --release --locked
+cargo audit                                                 # needs cargo-audit; CI runs it too
 cargo run -- --completions fish                             # run the binary from source
-just check                                                  # fmt --check, clippy, test, release build (same gate quick-release.sh uses)
-cargo +1.85.0 check                                         # what the CI msrv job runs
+cargo +1.85.0 check --locked                                # what the CI msrv job runs
 ```
 
-Integration tests spawn the compiled binary through `CARGO_BIN_EXE_cctx`. The `Sandbox` helper in `tests/cli.rs` points `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`, and `CCTX_HOME` at a temp dir, sets `NO_COLOR=1`, and strips the auth-override variables. Ordinary integration tests must go through it so they never touch the real `~/.claude` or `~/.cctx`. User-authorized real-account E2E is opt-in and documented in `docs/e2e.md`.
+Integration tests spawn the compiled binary through `CARGO_BIN_EXE_cctx`. The `Sandbox` helper in `tests/cli.rs` points `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`, and `CCTX_HOME` at a temp dir, sets `NO_COLOR=1`, and strips the auth-override variables. Ordinary integration tests must go through it so they never touch the real `~/.claude` or `~/.cctx`. The shell test runs the real `bash`, `zsh`, and `fish` when they are installed and skips missing ones. User-authorized real-account E2E is opt-in and documented in `docs/e2e.md`.
 
 ## Release
 
-`./quick-release.sh patch|minor|major` is the only release path (the justfile has no release recipe). It refuses to run unless the tree is clean, the branch is `main`, and `main` matches `origin/main`. It then runs the same `--locked` fmt/clippy/test/build gate as CI, bumps `Cargo.toml`, commits `chore(release): bump version to X.Y.Z`, tags `vX.Y.Z`, and pushes. The tag triggers `.github/workflows/release.yml` (binaries for Linux glibc and musl, Windows, macOS x86_64 and aarch64) and `publish.yml` (crates.io, needs the `CARGO_REGISTRY_TOKEN` repository secret; the crate ships only `src/`, `shell/`, README and LICENSE through `include` in `Cargo.toml`). `ci.yml` runs on pushes to `main`, on pull requests, and on manual dispatch: fmt, clippy, tests, and a release build on Ubuntu, macOS, and Windows, plus `cargo audit` and `cargo check` on Rust 1.85. A feature branch gets CI through a pull request, not on push. Every cargo invocation in CI uses `--locked`, so commit `Cargo.lock` changes together with `Cargo.toml` changes.
+`./quick-release.sh patch|minor|major` is the only release path (the justfile has no release recipe). It refuses to run unless the tree is clean, the branch is `main`, and `main` matches `origin/main`. It then runs the same `--locked` fmt/clippy/test/build gate as CI, bumps `Cargo.toml`, commits `chore(release): bump version to X.Y.Z`, tags `vX.Y.Z`, and pushes. When `Cargo.toml` already holds an unreleased version, tag that commit directly instead of bumping again.
+
+The tag triggers `.github/workflows/release.yml` (binaries `cctx-linux-x86_64`, `cctx-linux-x86_64-musl`, `cctx-windows-x86_64.exe`, `cctx-macos-x86_64`, `cctx-macos-aarch64` plus the GitHub release) and `publish.yml` (crates.io). The publish job fails fast when the `CARGO_REGISTRY_TOKEN` repository secret is missing; after fixing the secret, re-run the failed job rather than re-tagging. The crate ships only `src/`, `shell/`, README and LICENSE through `include` in `Cargo.toml`, and `cargo publish --dry-run --locked` reproduces everything except the upload.
+
+`ci.yml` runs on pushes to `main`, on pull requests, and on manual dispatch: fmt, clippy, tests, and a release build on Ubuntu, macOS, and Windows, plus `cargo audit` and `cargo check` on Rust 1.85. A feature branch gets CI through a pull request, not on push. Every cargo invocation in CI uses `--locked`, so commit `Cargo.lock` changes together with `Cargo.toml` changes.
+
+## Documentation
+
+The README is the user manual and mirrors the binary: its Install section names the release artifacts above and the `cargo install cctx --locked` / `cargo install --git ... --locked` commands, Shell setup shows the `--shell-init` snippets, Everyday commands and the Accounts / Settings contexts blocks list the flags, Completion shows output paths, and Development lists the same commands as this file and `just check`. When a flag, artifact name, or check command changes, update README, this file, and the release-notes body in `release.yml` in the same commit, and make sure `cargo run -- --help` agrees with what the README shows. `docs/e2e.md` describes the opt-in real-account test only.
 
 ## Architecture
 
@@ -55,7 +64,7 @@ cctx never reads, copies, or writes Claude credentials. `--add-account` creates 
 
 ### Shell integration and completions
 
-`shell/cctx.sh` and `shell/cctx.fish` are embedded with `include_str!` by `src/shell.rs` and printed by `--shell-init`. The shell function intercepts exactly `cctx --account NAME`, asks the binary for the validated path with the hidden `--shell-path`, and exports or unsets `CLAUDE_CONFIG_DIR`; every other invocation is passed to the binary unchanged. `src/completions.rs` generates clap completions with the default config dir's context names injected as possible values for the positional argument (needs clap's `string` feature), so the script is a snapshot taken at generation time.
+`shell/cctx.sh` and `shell/cctx.fish` are embedded with `include_str!` by `src/shell.rs` and printed by `--shell-init`. The shell function intercepts exactly `cctx --account NAME`, asks the binary for the validated path with the hidden `--shell-path`, and exports or unsets `CLAUDE_CONFIG_DIR`; every other invocation is passed to the binary unchanged. The README's Fish snippet guards the call with `status is-interactive; and command -sq cctx`; keep any change to the scripts compatible with that and with `eval "$(cctx --shell-init bash)"`. `src/completions.rs` generates clap completions with the default config dir's context names injected as possible values for the positional argument (needs clap's `string` feature), so the script is a snapshot taken at generation time.
 
 ## UX rules
 
