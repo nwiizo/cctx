@@ -1,47 +1,45 @@
 # cctx
 
-Manage Claude Code accounts and settings contexts. Each named account has its own
-Claude configuration directory; Claude Code handles login, credentials and refresh.
-Saved settings contexts switch the `settings.json` inside any account.
-Selecting an account never starts a Claude coding session. Run `claude` yourself.
+[![Crates.io](https://img.shields.io/crates/v/cctx)](https://crates.io/crates/cctx)
+[![CI](https://github.com/nwiizo/cctx/actions/workflows/ci.yml/badge.svg)](https://github.com/nwiizo/cctx/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Everyday commands
-
-| Task | Command |
-| --- | --- |
-| List account profiles | `cctx --accounts` |
-| Select the second account in this terminal | `cctx --account secondary` |
-| Return to the original account | `cctx --account default` |
-| Check the selected login | `claude auth status --text` |
-| Start Claude Code yourself | `claude` |
-
-`cctx` uses flags, not subcommands: the account-list command is
-`cctx --accounts`, not `cctx list --account`. Running `cctx` without arguments
-lists saved **settings contexts**, not accounts. Account selection requires the
-shell integration below.
+Manage Claude Code accounts and settings contexts from the command line, kubectx
+style. Each named account has its own Claude configuration directory; Claude Code
+handles login, credentials and refresh, and cctx never reads or copies them. Saved
+settings contexts switch the `settings.json` inside any account. Selecting an
+account never starts a Claude coding session. Run `claude` yourself.
 
 ## Install
 
-```sh
-git clone https://github.com/nwiizo/cctx.git
-cd cctx
-cargo install --path . --locked
-```
-
-Requires Rust 1.85 or later to build (edition 2024). Account commands require `claude` on PATH.
-The account workflow has been developed against Claude Code 2.1.278. The version
-published on crates.io may lag behind this checkout.
-
-To replace an existing installation with this checkout:
+Pick one:
 
 ```sh
-cargo install --path . --locked --force
-cctx --version
+# From crates.io (needs Rust 1.85 or later)
+cargo install cctx --locked
+
+# Prebuilt binary from GitHub Releases (example: macOS on Apple Silicon)
+curl -fsSLo cctx https://github.com/nwiizo/cctx/releases/latest/download/cctx-macos-aarch64
+chmod +x cctx && sudo mv cctx /usr/local/bin/cctx
+
+# From source
+cargo install --git https://github.com/nwiizo/cctx --locked
 ```
+
+Release assets: `cctx-linux-x86_64`, `cctx-linux-x86_64-musl` (static),
+`cctx-windows-x86_64.exe`, `cctx-macos-x86_64` and `cctx-macos-aarch64`. Run the same
+`cargo install` command again to upgrade.
+
+Account commands need `claude` on PATH. The account workflow was developed against
+Claude Code 2.1.278.
 
 ## Shell setup
 
-For Fish, add this to `~/.config/fish/config.fish`:
+Selecting an account changes `CLAUDE_CONFIG_DIR` in your current shell, which a binary
+cannot do by itself, so load the shell function once in your shell configuration.
+Every other command works without it.
+
+Fish (`~/.config/fish/config.fish`):
 
 ```fish
 if status is-interactive; and command -sq cctx
@@ -49,24 +47,37 @@ if status is-interactive; and command -sq cctx
 end
 ```
 
-Open a new terminal to load it. To enable it in an already open Fish session,
-run `cctx --shell-init fish | source` once.
+Bash (`~/.bashrc`) or Zsh (`~/.zshrc`):
 
-For Bash, add this to `~/.bashrc`:
-
-```bash
-eval "$(cctx --shell-init bash)"
+```sh
+eval "$(cctx --shell-init bash)"   # zsh: eval "$(cctx --shell-init zsh)"
 ```
 
-For Zsh, add `eval "$(cctx --shell-init zsh)"` to `~/.zshrc`.
+Open a new terminal, or run the same line once in the current one.
+
+## Everyday commands
+
+| Task | Command |
+| --- | --- |
+| Create a second profile and log in once | `cctx --add-account secondary && cctx --account secondary --login` |
+| List account profiles | `cctx --accounts` |
+| Select the second account in this terminal | `cctx --account secondary` |
+| Return to the original account | `cctx --account default` |
+| Check the selected login | `claude auth status --text` |
+| Start Claude Code yourself | `claude` |
+| Save the current settings as a context, then activate it | `cctx -n work && cctx work` |
+
+`cctx` uses flags, not subcommands: the account-list command is `cctx --accounts`,
+not `cctx list --account`. Running `cctx` without arguments lists saved
+**settings contexts**, not accounts.
 
 ## Accounts
 
-The existing Claude login is available as `default`; there is no need to create
-or log in to that profile again. Create another profile and log in once:
+The existing Claude login is available as `default`; there is no need to create or
+log in to that profile again. Create another profile and log in once:
 
 ```sh
-# Keep your existing Claude login as default
+# Confirm the existing login
 cctx --account default --status
 
 # Set up a second login once
@@ -93,63 +104,53 @@ cctx --account secondary --logout
 ```
 
 Names are local labels, not email addresses. `--accounts` lists directories, not
-verified login identities; `--status` asks Claude Code for the actual account.
-For example, after creating `secondary`, `cctx --accounts` lists `default` at
-`~/.claude` and `secondary` at `~/.cctx/accounts/secondary` (as absolute paths).
-Use `cctx --account secondary --status` to inspect that profile without changing
-the current shell's selection. The same applies to `--login`, `--logout` and
-settings operations: only `cctx --account NAME` on its own selects an account.
+verified login identities; `--status` asks Claude Code for the actual account. Only
+`cctx --account NAME` on its own selects an account; combined with `--login`,
+`--logout`, `--status` or a settings operation it scopes that operation to the profile
+without changing the current shell's selection.
 
-Selection affects only the current shell and future child processes. Other terminals
-and already running Claude sessions keep their account. A new terminal starts with
-its inherited environment; no account selection is persisted globally. The binary
-alone cannot modify its parent shell, so account switching requires the shell function.
+Selection affects only the current shell and its future child processes. Other
+terminals and already running Claude sessions keep their account, and no selection
+is persisted globally. Shell aliases such as `alias cc-secondary='cctx --account secondary'`
+are a convenient shortcut.
 
-`default` restores the original Claude configuration by **unsetting**
-`CLAUDE_CONFIG_DIR`. Setting it explicitly to `~/.claude` is not equivalent: Claude
-Code 2.1.278 then looks for a different global state file and Keychain namespace.
-Named profiles live in `~/.cctx/accounts/NAME`; `CCTX_HOME` overrides `~/.cctx`. Profile paths are
-canonicalized before selection because macOS Keychain entries depend on
-the configuration directory. Do not move or rename a logged-in profile directory.
-New profiles are empty: credentials, history, settings and plugins are never copied.
-`claude --continue` and `claude --resume` therefore use the selected account's
-history; switching accounts does not transfer an existing conversation.
-On Unix, newly created account directories have mode `0700`.
+`default` restores the original configuration by **unsetting** `CLAUDE_CONFIG_DIR`.
+Setting it explicitly to `~/.claude` is not equivalent: Claude Code 2.1.278 then uses a
+different global state file and Keychain namespace. Named profiles live in
+`~/.cctx/accounts/NAME`; `CCTX_HOME` overrides `~/.cctx`. Profile paths are
+canonicalized before selection because macOS Keychain entries depend on the
+configuration directory, so do not move or rename a logged-in profile directory.
+New profiles are empty: credentials, history, settings and plugins are never copied,
+and `claude --continue` or `claude --resume` see only the selected account's history.
+On Unix, new account directories have mode `0700`.
 
 When inherited API keys, OAuth tokens, Anthropic profile selectors or cloud-provider
 selectors could override the account, cctx stops and names the variables without
 printing their values. Settings files, managed policies and gateways are still
 interpreted by Claude Code; check `--status` before using sensitive projects.
-Project settings remain associated with the project and are not isolated by account.
+Project settings stay with the project and are not isolated by account.
 
-For convenience, add shell aliases yourself:
-
-```sh
-alias cc-work='cctx --account default'
-alias cc-secondary='cctx --account secondary'
-```
-
-To retire a profile, use `--logout` first. cctx deliberately has no recursive
-profile-delete command: conversation history and settings stay available for backup.
+To retire a profile, run `--logout` first. cctx deliberately has no profile-delete
+command: conversation history and settings stay available for backup.
 
 ## Settings contexts
 
-A context is a saved `settings.json`, independent of your login identity.
-The original context commands are retained: `cctx work` activates settings named
-`work`, while `cctx --account work` selects an account profile named `work`.
+A context is a saved `settings.json`, independent of your login identity. `cctx work`
+activates the settings named `work`, while `cctx --account work` selects an account
+profile named `work`.
 
 ```sh
 cctx -n personal                 # Save current settings (or {} if absent)
 cctx -n work
-cctx work                       # Activate saved settings
-cctx -                          # Return to previous context
-cctx                            # List contexts
-cctx -c                         # Print current name
+cctx work                        # Activate saved settings
+cctx -                           # Return to previous context
+cctx                             # List contexts
+cctx -c                          # Print current name
 cctx -r work restricted          # Rename
 cctx -e restricted               # Edit with EDITOR, VISUAL, or vi
 cctx -s restricted               # Show JSON
 cctx -d personal                 # Delete an inactive context
-cctx -u                         # Remove active settings; keep saved contexts
+cctx -u                          # Remove active settings; keep saved contexts
 
 # Apply the same operations inside one account
 cctx --account secondary -n restricted
@@ -157,18 +158,18 @@ cctx --account secondary restricted
 ```
 
 Contexts live in `settings/` inside the selected Claude directory. Existing
-`~/.claude/settings/*.json` and `.cctx-state.json` files retain their formats.
+`~/.claude/settings/*.json` and `.cctx-state.json` files keep their formats.
 Project-level `.claude/settings.json` files belong to the project and are not
 managed by cctx.
 
 Names must be visible filenames without path separators or platform-reserved
-characters. Hidden names and `-` are reserved. Activating or importing invalid JSON
-or a non-object JSON value fails before replacing settings. Individual file writes
-use temporary files and atomic replacement; a settings file plus its state file are
-**not** a single transaction. Avoid concurrent settings edits within the same
-profile. Separate accounts can run concurrently.
+characters; hidden names and `-` are reserved. Activating or importing invalid JSON
+or a non-object JSON value fails before anything is replaced. Files are written
+through temporary files and atomic replacement, but a settings file plus its state
+file are **not** a single transaction, so avoid concurrent settings edits within the
+same profile. Separate accounts can run concurrently.
 
-Plain `cctx` lists contexts; `-q` prints only the current context name.
+`-q` prints only the current context name.
 
 ## Import and export
 
@@ -184,18 +185,18 @@ context. Edit the result with `-e` when it needs adjusting.
 ## Completion
 
 ```sh
-cctx --completions zsh > _cctx
-cctx --completions bash > cctx.bash
-cctx --completions fish > cctx.fish
+cctx --completions fish > ~/.config/fish/completions/cctx.fish
+cctx --completions zsh > ~/.zfunc/_cctx                      # any directory on $fpath
+cctx --completions bash > ~/.local/share/bash-completion/completions/cctx
 ```
 
-PowerShell and Elvish are also supported. Options are generated from the CLI
-definition, and context candidates reflect the configuration directory at generation
-time. Regenerate after changing saved contexts.
+PowerShell and Elvish are also supported. Options come from the CLI definition, and
+context-name candidates reflect the configuration directory at generation time, so
+regenerate after changing saved contexts.
 
 ## Claude Code compatibility
 
-The current integration uses these official interfaces:
+The integration uses these official interfaces:
 
 | Claude Code capability | cctx usage |
 | --- | --- |
@@ -216,30 +217,28 @@ Sources: [environment variables](https://code.claude.com/docs/en/env-vars),
 ## Development
 
 ```sh
+just check      # fmt, clippy, tests and a release build with --locked, same as CI
+cargo audit     # dependency advisories (cargo install cargo-audit)
+```
+
+Without `just`:
+
+```sh
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all --all-targets
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --all-targets --locked
 cargo build --release --locked
-cargo audit
 ```
 
 CLI tests isolate HOME, USERPROFILE, CCTX_HOME and CLAUDE_CONFIG_DIR in temporary
-directories. Unix authentication tests use a controlled executable to check
-directory isolation and child exit codes without accessing a real login. Shell tests
-check account selection, failed-selection rollback, default restoration and that
-selection never starts Claude.
-See [docs/e2e.md](docs/e2e.md) for real Claude Code verification.
+directories, use a stand-in `claude` executable to check directory isolation and
+exit codes, and verify that shell selection switches, rolls back on failure, restores
+`default` and never starts Claude. An opt-in test against two real logins is
+described in [docs/e2e.md](docs/e2e.md); it consumes usage and is excluded from
+ordinary runs.
 
-The macOS/Fish workflow was verified with two real accounts on Claude Code
-2.1.278: `default → secondary → default` restored the expected identities, and
-both accounts returned a response through plain `claude`. To repeat this check
-after authenticating both accounts and installing this checkout:
-
-```sh
-cargo test --test claude_e2e -- --ignored --nocapture
-```
-
-This opt-in test makes a small model request under each account and consumes
-usage. It is excluded from ordinary test runs.
+Releases: `./quick-release.sh patch|minor|major` on a clean, up-to-date `main` bumps
+the version, tags `vX.Y.Z` and pushes. The tag builds the binaries above, creates
+the GitHub release and publishes to crates.io.
 
 MIT license. Inspired by kubectx.
