@@ -1,11 +1,11 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
 
 use crate::storage::validate_name;
 
-pub fn default_config_dir() -> Result<PathBuf> {
+pub(crate) fn default_config_dir() -> Result<PathBuf> {
     match std::env::var_os("CLAUDE_CONFIG_DIR") {
         Some(path) if !path.is_empty() => Ok(PathBuf::from(path)),
         _ => Ok(dirs::home_dir()
@@ -15,12 +15,12 @@ pub fn default_config_dir() -> Result<PathBuf> {
 }
 
 /// Account directories never depend on the currently selected Claude profile.
-pub struct Accounts {
+pub(crate) struct Accounts {
     root: PathBuf,
 }
 
 impl Accounts {
-    pub fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let home = match std::env::var_os("CCTX_HOME") {
             Some(path) if !path.is_empty() => PathBuf::from(path),
             _ => dirs::home_dir()
@@ -40,7 +40,7 @@ impl Accounts {
         Ok(self.root.join(name))
     }
 
-    pub fn add(&self, name: &str) -> Result<()> {
+    pub(crate) fn add(&self, name: &str) -> Result<()> {
         let path = self.path(name)?;
         fs::create_dir_all(&self.root)?;
         // create_dir deliberately refuses existing profiles, including symlinks.
@@ -55,7 +55,7 @@ impl Accounts {
         Ok(())
     }
 
-    pub fn resolve(&self, name: &str) -> Result<PathBuf> {
+    pub(crate) fn resolve(&self, name: &str) -> Result<PathBuf> {
         if name == "default" {
             return Ok(dirs::home_dir()
                 .context("Failed to get home directory")?
@@ -75,7 +75,7 @@ impl Accounts {
         fs::canonicalize(path).context("Failed to resolve account directory")
     }
 
-    pub fn list(&self) -> Result<()> {
+    pub(crate) fn list(&self) -> Result<()> {
         println!("default\t{}", self.resolve("default")?.display());
         if !self.root.exists() {
             return Ok(());
@@ -99,7 +99,7 @@ impl Accounts {
     }
 }
 
-pub fn check_auth_overrides() -> Result<()> {
+pub(crate) fn check_auth_overrides() -> Result<()> {
     let overrides = [
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_AUTH_TOKEN",
@@ -114,13 +114,16 @@ pub fn check_auth_overrides() -> Result<()> {
         .filter(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
         .collect();
     if !present.is_empty() {
-        bail!("Account login may be overridden by {}. Unset these variables before selecting an account.", present.join(", "));
+        bail!(
+            "Account login may be overridden by {}. Unset these variables before selecting an account.",
+            present.join(", ")
+        );
     }
     Ok(())
 }
 
 /// Only authentication commands are delegated. Never start a coding session.
-pub fn authenticate(config_dir: Option<PathBuf>, action: &str) -> Result<ExitStatus> {
+pub(crate) fn authenticate(config_dir: Option<PathBuf>, action: &str) -> Result<ExitStatus> {
     check_auth_overrides()?;
     let mut command = Command::new("claude");
     match config_dir {

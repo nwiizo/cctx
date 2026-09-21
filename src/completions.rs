@@ -1,12 +1,12 @@
 use anyhow::Result;
-use clap::{builder::PossibleValuesParser, CommandFactory};
-use clap_complete::{generate, Shell};
+use clap::{CommandFactory, builder::PossibleValuesParser};
+use clap_complete::{Shell, generate};
 use std::io;
 
 use crate::cli::Cli;
 use crate::context::ContextManager;
 
-pub fn print_enhanced_completions(shell: Shell) -> Result<()> {
+pub(crate) fn print_completions(shell: Shell) -> Result<()> {
     let contexts = ContextManager::new()?.list_contexts()?;
     let mut command = Cli::command();
     if !contexts.is_empty() {

@@ -16,7 +16,6 @@ impl Sandbox {
             .env("USERPROFILE", self.0.path())
             .env("CCTX_HOME", self.0.path().join("profiles"))
             .env("CLAUDE_CONFIG_DIR", self.0.path().join("claude"))
-            .env("CCTX_INTERACTIVE", "0")
             .env("NO_COLOR", "1");
         for name in [
             "ANTHROPIC_API_KEY",
@@ -122,24 +121,6 @@ fn authentication_uses_isolated_directory_and_preserves_exit_status() {
 }
 
 #[test]
-fn merge_history_survives_rename_and_full_unmerge() {
-    let s = Sandbox::new();
-    s.ok(&["-n", "target"]);
-    fs::write(
-        s.0.path().join("source.json"),
-        r#"{"model":"sonnet","permissions":{"deny":["Bash"]}}"#,
-    )
-    .unwrap();
-    s.ok(&["--merge-from", "source.json", "--merge-full", "target"]);
-    s.ok(&["-r", "target", "renamed"]);
-    s.ok(&["--unmerge", "source.json", "--merge-full", "renamed"]);
-    let result: serde_json::Value =
-        serde_json::from_slice(&s.ok(&["-s", "renamed"]).stdout).unwrap();
-    assert!(result.get("model").is_none());
-    assert_eq!(result["permissions"]["deny"], serde_json::json!([]));
-}
-
-#[test]
 fn completions_include_account_commands_for_every_shell() {
     let s = Sandbox::new();
     for shell in ["bash", "zsh", "fish", "powershell", "elvish"] {
@@ -185,18 +166,20 @@ fn accounts_isolate_settings_and_preserve_existing_login() {
     );
     let list = String::from_utf8(s.ok(&["--accounts"]).stdout).unwrap();
     assert!(list.contains("work") && list.contains("personal"));
-    assert!(!s
-        .command()
-        .args(["--add-account", "work"])
-        .status()
-        .unwrap()
-        .success());
-    assert!(!s
-        .command()
-        .args(["--account", "missing", "--run"])
-        .status()
-        .unwrap()
-        .success());
+    assert!(
+        !s.command()
+            .args(["--add-account", "work"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        !s.command()
+            .args(["--account", "missing", "-c"])
+            .status()
+            .unwrap()
+            .success()
+    );
 }
 
 #[test]
@@ -213,13 +196,14 @@ fn legacy_contexts_respect_config_dir_and_rename_accepts_two_names() {
         "renamed"
     );
     assert!(s.0.path().join("claude/settings/renamed.json").exists());
-    assert!(!s
-        .command()
-        .args(["-d", "renamed"])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        !s.command()
+            .args(["-d", "renamed"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 }
 
 #[test]
@@ -245,7 +229,8 @@ fn conflicting_modes_and_unsafe_names_are_rejected() {
     let s = Sandbox::new();
     for args in [
         vec!["-n", "-d", "x"],
-        vec!["--local", "--in-project"],
+        vec!["-r", "only-one"],
+        vec!["-d"],
         vec!["-n", ".hidden"],
         vec!["-s", "../outside"],
         vec!["--add-account", "../escape"],

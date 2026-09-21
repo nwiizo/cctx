@@ -1,108 +1,57 @@
-use anyhow::{bail, Result};
-use colored::*;
+use anyhow::{Result, bail};
+use colored::Colorize;
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::merge::MergeManager;
 use crate::state::State;
 use crate::storage::{atomic_write, read_settings, validate_name, validate_settings};
 
-#[derive(Debug, Clone)]
-pub enum SettingsLevel {
-    User,    // ~/.claude/settings.json (default)
-    Project, // ./.claude/settings.json (explicit)
-    Local,   // ./.claude/settings.local.json (explicit)
-}
-
-pub struct ContextManager {
-    pub contexts_dir: PathBuf,
-    pub claude_settings_path: PathBuf,
-    pub state_path: PathBuf,
-    pub settings_level: SettingsLevel,
-    user_config_dir: PathBuf,
+/// Saved `settings.json` files inside one Claude configuration directory.
+pub(crate) struct ContextManager {
+    contexts_dir: PathBuf,
+    settings_path: PathBuf,
+    state_path: PathBuf,
 }
 
 impl ContextManager {
-    pub fn new() -> Result<Self> {
-        Self::new_with_level(SettingsLevel::User)
+    pub(crate) fn new() -> Result<Self> {
+        Self::with_config_dir(crate::account::default_config_dir()?)
     }
 
-    pub fn new_with_level(level: SettingsLevel) -> Result<Self> {
-        Self::with_config_dir(level, crate::account::default_config_dir()?)
-    }
-
-    pub fn with_config_dir(level: SettingsLevel, user_config_dir: PathBuf) -> Result<Self> {
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-        let (claude_settings_path, contexts_dir, state_path) = match level {
-            SettingsLevel::User => {
-                let claude_dir = &user_config_dir;
-                let contexts_dir = claude_dir.join("settings");
-                let claude_settings_path = claude_dir.join("settings.json");
-                let state_path = contexts_dir.join(".cctx-state.json");
-                (claude_settings_path, contexts_dir, state_path)
-            }
-            SettingsLevel::Project => {
-                let claude_dir = current_dir.join(".claude");
-                let contexts_dir = claude_dir.join("settings");
-                let claude_settings_path = claude_dir.join("settings.json");
-                let state_path = contexts_dir.join(".cctx-state.json");
-                (claude_settings_path, contexts_dir, state_path)
-            }
-            SettingsLevel::Local => {
-                let claude_dir = current_dir.join(".claude");
-                let contexts_dir = claude_dir.join("settings");
-                let claude_settings_path = claude_dir.join("settings.local.json");
-                let state_path = contexts_dir.join(".cctx-state.local.json");
-                (claude_settings_path, contexts_dir, state_path)
-            }
-        };
-
-        // Create directories if they don't exist
+    /// Contexts live in `settings/` next to the `settings.json` they replace.
+    pub(crate) fn with_config_dir(config_dir: PathBuf) -> Result<Self> {
+        let contexts_dir = config_dir.join("settings");
         fs::create_dir_all(&contexts_dir)?;
-
         Ok(Self {
+            settings_path: config_dir.join("settings.json"),
+            state_path: contexts_dir.join(".cctx-state.json"),
             contexts_dir,
-            claude_settings_path,
-            state_path,
-            settings_level: level,
-            user_config_dir,
         })
     }
 
-    /// Check if project-level contexts are available in current directory
-    pub fn has_project_contexts() -> bool {
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let project_contexts_dir = current_dir.join(".claude").join("settings");
-
-        if let Ok(entries) = fs::read_dir(&project_contexts_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                        if !filename.starts_with('.') {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    /// Check if local contexts are available in current directory  
-    pub fn has_local_contexts() -> bool {
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        current_dir
-            .join(".claude")
-            .join("settings.local.json")
-            .exists()
-    }
-
-    pub fn context_path(&self, name: &str) -> Result<PathBuf> {
+    fn context_path(&self, name: &str) -> Result<PathBuf> {
         validate_name(name)?;
         Ok(self.contexts_dir.join(format!("{name}.json")))
+    }
+
+    /// Path of a saved context that must already exist.
+    fn existing_context(&self, name: &str) -> Result<PathBuf> {
+        let path = self.context_path(name)?;
+        if !path.is_file() {
+            bail!("no context exists with the name {name:?}");
+        }
+        Ok(path)
+    }
+
+    /// Path for a context that must not exist yet.
+    fn new_context(&self, name: &str) -> Result<PathBuf> {
+        let path = self.context_path(name)?;
+        if path.exists() {
+            bail!("context {name:?} already exists");
+        }
+        Ok(path)
     }
 
     fn load_state(&self) -> Result<State> {
@@ -113,173 +62,80 @@ impl ContextManager {
         state.save(&self.state_path)
     }
 
-    pub fn list_contexts(&self) -> Result<Vec<String>> {
-        let mut contexts = Vec::new();
-
-        if let Ok(entries) = fs::read_dir(&self.contexts_dir) {
-            for entry in entries {
-                let entry = entry?;
-                let path = entry.path();
-
-                // Skip hidden files and non-JSON files
-                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                    if filename.starts_with('.') {
-                        continue;
-                    }
-                }
-
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                        contexts.push(name.to_string());
-                    }
-                }
-            }
-        }
-
+    /// Sorted context names; hidden files such as the state file are skipped.
+    pub(crate) fn list_contexts(&self) -> Result<Vec<String>> {
+        let mut contexts: Vec<String> = fs::read_dir(&self.contexts_dir)?
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "json")
+            })
+            .filter_map(|path| path.file_stem()?.to_str().map(str::to_owned))
+            .filter(|name| !name.starts_with('.'))
+            .collect();
         contexts.sort();
         Ok(contexts)
     }
 
-    pub fn get_current_context(&self) -> Result<Option<String>> {
-        let state = self.load_state()?;
-        Ok(state.current)
+    pub(crate) fn current_context(&self) -> Result<Option<String>> {
+        Ok(self.load_state()?.current)
     }
 
-    pub fn switch_context(&self, name: &str) -> Result<()> {
-        let contexts = self.list_contexts()?;
-        if !contexts.contains(&name.to_string()) {
-            bail!("error: no context exists with the name \"{}\"", name);
-        }
-
+    pub(crate) fn switch_context(&self, name: &str) -> Result<()> {
+        // Validate before touching the active settings so a broken context never replaces them.
+        let content = read_settings(&self.existing_context(name)?)?;
         let mut state = self.load_state()?;
-        state.set_current(name.to_string());
-
-        // Copy context settings to Claude settings
-        let context_path = self.context_path(name)?;
-        let content = read_settings(&context_path)?;
-
-        // Create .claude directory if it doesn't exist
-        if let Some(parent) = self.claude_settings_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        atomic_write(&self.claude_settings_path, content)?;
+        state.set_current(name.to_owned());
+        atomic_write(&self.settings_path, content)?;
         self.save_state(&state)?;
-
         println!("Switched to context \"{}\"", name.green().bold());
         Ok(())
     }
 
-    pub fn switch_to_previous(&self) -> Result<()> {
-        let state = self.load_state()?;
-
-        if let Some(previous) = state.previous {
-            self.switch_context(&previous)?;
-        } else {
-            bail!("error: no previous context");
+    pub(crate) fn switch_to_previous(&self) -> Result<()> {
+        match self.load_state()?.previous {
+            Some(previous) => self.switch_context(&previous),
+            None => bail!("no previous context"),
         }
-
-        Ok(())
     }
 
-    pub fn create_context(&self, name: &str) -> Result<()> {
-        validate_name(name)?;
-
-        let contexts = self.list_contexts()?;
-        if contexts.contains(&name.to_string()) {
-            bail!("error: context \"{}\" already exists", name);
-        }
-
-        let context_path = self.context_path(name)?;
-
-        if self.claude_settings_path.exists() {
-            // Copy current Claude settings
-            atomic_write(&context_path, read_settings(&self.claude_settings_path)?)?;
+    pub(crate) fn create_context(&self, name: &str) -> Result<()> {
+        let path = self.new_context(name)?;
+        if self.settings_path.is_file() {
+            atomic_write(&path, read_settings(&self.settings_path)?)?;
             println!(
                 "Context \"{}\" created from current settings",
                 name.green().bold()
             );
         } else {
-            // Create empty settings
-            let empty_settings = serde_json::json!({});
-            atomic_write(
-                &context_path,
-                serde_json::to_string_pretty(&empty_settings)?,
-            )?;
+            atomic_write(&path, "{}")?;
             println!("Context \"{}\" created (empty)", name.green().bold());
         }
-
         Ok(())
     }
 
-    pub fn delete_context(&self, name: &str) -> Result<()> {
-        let state = self.load_state()?;
-
-        if state.current.as_ref() == Some(&name.to_string()) {
-            bail!("error: cannot delete the active context \"{}\"", name);
+    pub(crate) fn delete_context(&self, name: &str) -> Result<()> {
+        let mut state = self.load_state()?;
+        if state.current.as_deref() == Some(name) {
+            bail!("cannot delete the active context {name:?}");
         }
-
-        let context_path = self.context_path(name)?;
-        if !context_path.exists() {
-            bail!("error: no context exists with the name \"{}\"", name);
+        fs::remove_file(self.existing_context(name)?)?;
+        if state.previous.as_deref() == Some(name) {
+            state.previous = None;
+            self.save_state(&state)?;
         }
-
-        fs::remove_file(context_path)?;
-
-        // Update state if this was the previous context
-        if state.previous.as_ref() == Some(&name.to_string()) {
-            let mut new_state = state;
-            new_state.previous = None;
-            self.save_state(&new_state)?;
-        }
-
         println!("Context \"{}\" deleted", name.red());
         Ok(())
     }
 
-    pub fn rename_context(&self, old_name: &str, new_name: &str) -> Result<()> {
-        validate_name(new_name)?;
-
-        let contexts = self.list_contexts()?;
-        if !contexts.contains(&old_name.to_string()) {
-            bail!("error: no context exists with the name \"{}\"", old_name);
-        }
-
-        if contexts.contains(&new_name.to_string()) {
-            bail!("error: context \"{}\" already exists", new_name);
-        }
-
-        let old_path = self.context_path(old_name)?;
-        let new_path = self.context_path(new_name)?;
-        let history = MergeManager::new(self.contexts_dir.clone());
-        let old_history = history.history_path(old_name)?;
-        let new_history = history.history_path(new_name)?;
-        if new_history.exists() {
-            bail!("merge history already exists for {new_name:?}");
-        }
+    pub(crate) fn rename_context(&self, old_name: &str, new_name: &str) -> Result<()> {
+        let old_path = self.existing_context(old_name)?;
+        let new_path = self.new_context(new_name)?;
         let mut state = self.load_state()?;
         fs::rename(old_path, new_path)?;
-        if old_history.exists() {
-            fs::rename(old_history, new_history)?;
-        }
-
-        // Update state if needed
-        let mut updated = false;
-
-        if state.current.as_ref() == Some(&old_name.to_string()) {
-            state.current = Some(new_name.to_string());
-            updated = true;
-        }
-
-        if state.previous.as_ref() == Some(&old_name.to_string()) {
-            state.previous = Some(new_name.to_string());
-            updated = true;
-        }
-
-        if updated {
+        if state.rename(old_name, new_name) {
             self.save_state(&state)?;
         }
-
         println!(
             "Context \"{}\" renamed to \"{}\"",
             old_name,
@@ -288,348 +144,72 @@ impl ContextManager {
         Ok(())
     }
 
-    pub fn show_context(&self, name: &str) -> Result<()> {
-        let context_path = self.context_path(name)?;
-        if !context_path.exists() {
-            bail!("error: no context exists with the name \"{}\"", name);
-        }
-
-        let content = fs::read_to_string(context_path)?;
+    pub(crate) fn show_context(&self, name: &str) -> Result<()> {
+        let content = fs::read_to_string(self.existing_context(name)?)?;
         let json: serde_json::Value = serde_json::from_str(&content)?;
-        let pretty = serde_json::to_string_pretty(&json)?;
-
-        println!("{pretty}");
+        println!("{}", serde_json::to_string_pretty(&json)?);
         Ok(())
     }
 
-    pub fn edit_context(&self, name: &str) -> Result<()> {
-        let context_path = self.context_path(name)?;
-        if !context_path.exists() {
-            bail!("error: no context exists with the name \"{}\"", name);
-        }
-
-        let editor = std::env::var("EDITOR")
-            .or_else(|_| std::env::var("VISUAL"))
-            .unwrap_or_else(|_| "vi".to_string());
-
-        let status = Command::new(&editor).arg(&context_path).status()?;
-
+    pub(crate) fn edit_context(&self, name: &str) -> Result<()> {
+        let path = self.existing_context(name)?;
+        let editor = std::env::var_os("EDITOR")
+            .or_else(|| std::env::var_os("VISUAL"))
+            .unwrap_or_else(|| "vi".into());
+        let status = Command::new(editor).arg(path).status()?;
         if !status.success() {
-            bail!("error: editor exited with non-zero status");
+            bail!("editor exited with non-zero status");
         }
-
         Ok(())
     }
 
-    pub fn export_context(&self, name: &str) -> Result<()> {
-        let context_path = self.context_path(name)?;
-        if !context_path.exists() {
-            bail!("error: no context exists with the name \"{}\"", name);
-        }
-
-        let content = fs::read_to_string(context_path)?;
-        print!("{content}");
+    pub(crate) fn export_context(&self, name: &str) -> Result<()> {
+        print!("{}", fs::read_to_string(self.existing_context(name)?)?);
         Ok(())
     }
 
-    pub fn import_context(&self, name: &str) -> Result<()> {
-        validate_name(name)?;
-
-        let contexts = self.list_contexts()?;
-        if contexts.contains(&name.to_string()) {
-            bail!("error: context \"{}\" already exists", name);
-        }
-
-        use std::io::Read;
-        let mut buffer = String::new();
-        std::io::stdin().read_to_string(&mut buffer)?;
-
-        // Validate JSON
-        validate_settings(&buffer)?;
-
-        let context_path = self.context_path(name)?;
-        atomic_write(&context_path, buffer)?;
-
+    pub(crate) fn import_context(&self, name: &str) -> Result<()> {
+        let path = self.new_context(name)?;
+        let mut content = String::new();
+        std::io::stdin().read_to_string(&mut content)?;
+        validate_settings(&content)?;
+        atomic_write(&path, content)?;
         println!("Context \"{}\" imported", name.green().bold());
         Ok(())
     }
 
-    pub fn unset_context(&self) -> Result<()> {
+    pub(crate) fn unset_context(&self) -> Result<()> {
         let mut state = self.load_state()?;
-        if self.claude_settings_path.exists() {
-            fs::remove_file(&self.claude_settings_path)?;
+        if self.settings_path.exists() {
+            fs::remove_file(&self.settings_path)?;
         }
-
-        if let Some(_current) = state.unset_current() {
+        if state.unset_current().is_some() {
             self.save_state(&state)?;
         }
-
         println!("Unset current context");
         Ok(())
     }
 
-    pub fn list_contexts_with_current(&self, quiet: bool) -> Result<()> {
-        let contexts = self.list_contexts()?;
-        let current = self.get_current_context()?;
-
+    pub(crate) fn list_contexts_with_current(&self, quiet: bool) -> Result<()> {
+        let current = self.current_context()?;
         if quiet {
-            // Quiet mode - only show current context
-            if let Some(current_ctx) = current {
-                println!("{current_ctx}");
+            if let Some(current) = current {
+                println!("{current}");
             }
             return Ok(());
         }
-
-        // Show helpful information for user-level contexts
-        if matches!(self.settings_level, SettingsLevel::User) {
-            // Show available project contexts as suggestion
-            if Self::has_project_contexts() {
-                println!(
-                    "{} Project contexts available: run 'cctx --in-project' to manage",
-                    "💡".yellow()
-                );
-            }
-            if Self::has_local_contexts() {
-                println!(
-                    "{} Local contexts available: run 'cctx --local' to manage",
-                    "💡".yellow()
-                );
-            }
-        }
-
-        // Show current settings level (condensed)
-        let level_emoji = match self.settings_level {
-            SettingsLevel::User => "👤",
-            SettingsLevel::Project => "📁",
-            SettingsLevel::Local => "💻",
-        };
-
+        let contexts = self.list_contexts()?;
         if contexts.is_empty() {
-            println!(
-                "{} {} contexts: No contexts found. Create one with: cctx -n <name>",
-                level_emoji,
-                format!("{:?}", self.settings_level).cyan()
-            );
+            println!("No contexts found. Create one with: cctx -n <name>");
             return Ok(());
         }
-
-        println!(
-            "{} {} contexts:",
-            level_emoji,
-            format!("{:?}", self.settings_level).cyan().bold()
-        );
-
-        // List contexts with current highlighted
-        for ctx in contexts {
-            if Some(&ctx) == current.as_ref() {
-                println!("  {} {}", ctx.green().bold(), "(current)".dimmed());
+        for context in contexts {
+            if current.as_deref() == Some(context.as_str()) {
+                println!("{} {}", context.green().bold(), "(current)".dimmed());
             } else {
-                println!("  {ctx}");
+                println!("{context}");
             }
         }
-
-        Ok(())
-    }
-
-    fn merge_target(&self, target_context: &str) -> Result<(PathBuf, String)> {
-        if target_context == "current" {
-            if !self.claude_settings_path.exists() {
-                bail!("error: no current context is set");
-            }
-            Ok((
-                self.claude_settings_path.clone(),
-                self.get_current_context()?
-                    .unwrap_or_else(|| "current".to_string()),
-            ))
-        } else {
-            let path = self.context_path(target_context)?;
-            if !path.exists() {
-                bail!(
-                    "error: no context exists with the name \"{}\"",
-                    target_context
-                );
-            }
-            Ok((path, target_context.to_string()))
-        }
-    }
-
-    fn merge_source(&self, source: &str) -> Result<String> {
-        let path = if source == "user" {
-            self.user_config_dir.join("settings.json")
-        } else if source.ends_with(".json") {
-            PathBuf::from(source)
-        } else {
-            self.context_path(source)?
-        };
-        read_settings(&path)
-    }
-
-    /// Merge permissions from another context or settings file
-    pub fn merge_from(&self, target_context: &str, source: &str) -> Result<()> {
-        let (target_path, context_name) = self.merge_target(target_context)?;
-        let source_content = self.merge_source(source)?;
-        // Parse JSON
-        let mut target_json: serde_json::Value =
-            serde_json::from_str(&read_settings(&target_path)?)?;
-        let source_json: serde_json::Value = serde_json::from_str(&source_content)?;
-
-        // Perform merge
-        let merge_manager = MergeManager::new(self.contexts_dir.clone());
-        let mut history = merge_manager.load_history(&context_name)?;
-        let history_entry =
-            merge_manager.merge_permissions(&mut target_json, &source_json, source)?;
-
-        // Save updated target
-        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
-
-        // Update history
-        history.push(history_entry.clone());
-        merge_manager.save_history(&context_name, &history)?;
-
-        println!(
-            "✅ Merged {} permissions from '{}' into '{}'",
-            history_entry.merged_items.len(),
-            source.green(),
-            target_context.green().bold()
-        );
-
-        if !history_entry.merged_items.is_empty() {
-            println!("\n📋 Merged items:");
-            for (i, item) in history_entry.merged_items.iter().enumerate() {
-                if i < 5 {
-                    println!("  • {}", item);
-                } else if i == 5 {
-                    println!("  ... and {} more", history_entry.merged_items.len() - 5);
-                    break;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Remove previously merged permissions
-    pub fn unmerge_from(&self, target_context: &str, source: &str) -> Result<()> {
-        let (target_path, context_name) = self.merge_target(target_context)?;
-
-        // Load and parse target JSON
-        let mut target_json: serde_json::Value =
-            serde_json::from_str(&read_settings(&target_path)?)?;
-
-        // Perform unmerge
-        let merge_manager = MergeManager::new(self.contexts_dir.clone());
-        merge_manager.unmerge_permissions(&mut target_json, &context_name, source)?;
-
-        // Save updated target
-        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
-
-        println!(
-            "✅ Removed all permissions previously merged from '{}' in '{}'",
-            source.red(),
-            target_context.green().bold()
-        );
-
-        Ok(())
-    }
-
-    /// Merge all settings from another context or settings file (full merge)
-    pub fn merge_from_full(&self, target_context: &str, source: &str) -> Result<()> {
-        let (target_path, context_name) = self.merge_target(target_context)?;
-        let source_content = self.merge_source(source)?;
-
-        // Parse JSON
-        let mut target_json: serde_json::Value =
-            serde_json::from_str(&read_settings(&target_path)?)?;
-        let source_json: serde_json::Value = serde_json::from_str(&source_content)?;
-
-        // Perform full merge
-        let merge_manager = MergeManager::new(self.contexts_dir.clone());
-        let mut history = merge_manager.load_history(&context_name)?;
-        let history_entry = merge_manager.merge_full(&mut target_json, &source_json, source)?;
-
-        // Save updated target
-        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
-
-        // Update history
-        history.push(history_entry.clone());
-        merge_manager.save_history(&context_name, &history)?;
-
-        println!(
-            "✅ Full merge completed: {} items from '{}' into '{}'",
-            history_entry.merged_items.len(),
-            source.green(),
-            target_context.green().bold()
-        );
-
-        if !history_entry.merged_items.is_empty() {
-            println!("\n📋 Merged items:");
-
-            // Group items by type for better display
-            let mut permissions_items = Vec::new();
-            let mut env_items = Vec::new();
-            let mut other_items = Vec::new();
-
-            for item in &history_entry.merged_items {
-                if item.starts_with("permissions.") {
-                    permissions_items.push(item);
-                } else if item.starts_with("env:") {
-                    env_items.push(item);
-                } else {
-                    other_items.push(item);
-                }
-            }
-
-            if !permissions_items.is_empty() {
-                println!("  🔒 Permissions: {} items", permissions_items.len());
-            }
-            if !env_items.is_empty() {
-                println!("  🌍 Environment: {} variables", env_items.len());
-            }
-            if !other_items.is_empty() {
-                let items_str: Vec<String> = other_items.iter().map(|s| s.to_string()).collect();
-                println!("  ⚙️  Settings: {}", items_str.join(", "));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Remove all settings that were previously merged from a specific source (full unmerge)
-    pub fn unmerge_from_full(&self, target_context: &str, source: &str) -> Result<()> {
-        let (target_path, context_name) = self.merge_target(target_context)?;
-
-        // Load and parse target JSON
-        let mut target_json: serde_json::Value =
-            serde_json::from_str(&read_settings(&target_path)?)?;
-
-        // Perform full unmerge
-        let merge_manager = MergeManager::new(self.contexts_dir.clone());
-        merge_manager.unmerge_full(&mut target_json, &context_name, source)?;
-
-        // Save updated target
-        atomic_write(&target_path, serde_json::to_string_pretty(&target_json)?)?;
-
-        println!(
-            "✅ Removed all settings previously merged from '{}' in '{}'",
-            source.red(),
-            target_context.green().bold()
-        );
-
-        Ok(())
-    }
-
-    /// Display merge history for a context
-    pub fn show_merge_history(&self, context_name: Option<&str>) -> Result<()> {
-        let name = if let Some(n) = context_name {
-            n.to_string()
-        } else {
-            self.get_current_context()?
-                .ok_or_else(|| anyhow::anyhow!("error: no current context set"))?
-        };
-
-        let merge_manager = MergeManager::new(self.contexts_dir.clone());
-        merge_manager.display_history(&name)?;
-
         Ok(())
     }
 }

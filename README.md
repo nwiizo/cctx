@@ -2,7 +2,7 @@
 
 Manage Claude Code accounts and settings contexts. Each named account has its own
 Claude configuration directory; Claude Code handles login, credentials and refresh.
-Existing settings-context commands continue to work.
+Saved settings contexts switch the `settings.json` inside any account.
 Selecting an account never starts a Claude coding session. Run `claude` yourself.
 
 ## Everyday commands
@@ -28,7 +28,7 @@ cd cctx
 cargo install --path . --locked
 ```
 
-Requires Rust 1.81 or later to build. Account commands require `claude` on PATH.
+Requires Rust 1.85 or later to build (edition 2024). Account commands require `claude` on PATH.
 The account workflow has been developed against Claude Code 2.1.278. The version
 published on crates.io may lag behind this checkout.
 
@@ -145,7 +145,7 @@ cctx work                       # Activate saved settings
 cctx -                          # Return to previous context
 cctx                            # List contexts
 cctx -c                         # Print current name
-cctx -r work restricted          # Rename; prompts if new name is omitted
+cctx -r work restricted          # Rename
 cctx -e restricted               # Edit with EDITOR, VISUAL, or vi
 cctx -s restricted               # Show JSON
 cctx -d personal                 # Delete an inactive context
@@ -154,49 +154,32 @@ cctx -u                         # Remove active settings; keep saved contexts
 # Apply the same operations inside one account
 cctx --account secondary -n restricted
 cctx --account secondary restricted
-
-# Explicit project scopes (cannot be combined with --account)
-cctx --in-project -n staging     # ./.claude/settings.json
-cctx --local -n development      # ./.claude/settings.local.json
 ```
 
-User contexts live in `settings/` inside the selected Claude directory. Existing
-`~/.claude/settings/*.json`, `.cctx-state.json` and merge-history files retain their
-formats. Project and local scopes retain the existing shared `./.claude/settings/`
-context library and separate state files.
+Contexts live in `settings/` inside the selected Claude directory. Existing
+`~/.claude/settings/*.json` and `.cctx-state.json` files retain their formats.
+Project-level `.claude/settings.json` files belong to the project and are not
+managed by cctx.
 
 Names must be visible filenames without path separators or platform-reserved
 characters. Hidden names and `-` are reserved. Activating or importing invalid JSON
 or a non-object JSON value fails before replacing settings. Individual file writes
-use temporary files and atomic replacement; a settings file plus its state/history
-file are **not** a single transaction. Avoid concurrent settings edits within the
-same profile. Separate accounts can run concurrently.
+use temporary files and atomic replacement; a settings file plus its state file are
+**not** a single transaction. Avoid concurrent settings edits within the same
+profile. Separate accounts can run concurrently.
 
-Use `CCTX_INTERACTIVE=1 cctx` for interactive selection (`fzf` when available,
-otherwise the built-in fuzzy selector). With no environment override, cctx lists
-contexts. `-q` prints only the current context name.
+Plain `cctx` lists contexts; `-q` prints only the current context name.
 
-## Import, export and merge
+## Import and export
 
 ```sh
 cctx --export restricted > restricted.json
 cctx --import staging < restricted.json
-cctx --merge-from restricted staging
-cctx --merge-from ./extra.json --merge-full staging
-cctx --merge-history staging
-cctx --unmerge ./extra.json --merge-full staging
+cctx --account secondary --export restricted | cctx --account work --import restricted
 ```
 
-The source is `user` (the selected account's active settings), a context name, or a
-path ending in `.json`. Omitting the target operates on the active settings file;
-an explicit target changes the saved context. Activate that context to use it.
-
-Permission merges add unique `allow`, `deny` and `ask` rules while preserving their
-order. Full merges also add absent environment variables and top-level settings;
-existing values win. Other fields within `permissions` are not merged.
-History records additions, not complete snapshots. Unmerge removes recorded
-additions; it does not reconstruct later manual edits. Permission-only unmerge
-leaves full-merge entries available for a later `--unmerge --merge-full`.
+Import reads one JSON object from stdin and refuses to overwrite an existing
+context. Edit the result with `-e` when it needs adjusting.
 
 ## Completion
 
