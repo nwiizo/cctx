@@ -24,7 +24,7 @@ Integration tests spawn the compiled binary through `CARGO_BIN_EXE_cctx`. The `S
 
 ## Release
 
-`./quick-release.sh patch|minor|major` (or `just release-patch` etc.) is the only release path. It refuses to run unless the tree is clean, the branch is `main`, and `main` matches `origin/main`. It then runs the checks above, bumps `Cargo.toml`, commits, tags `vX.Y.Z`, and pushes. The tag triggers `.github/workflows/release.yml` (binaries for Linux glibc and musl, Windows, macOS x86_64 and aarch64) and `publish.yml` (crates.io, needs the `CARGO_REGISTRY_TOKEN` repository secret). `ci.yml` runs fmt, clippy, tests, and a release build on Ubuntu, macOS, and Windows, plus `cargo audit` and an MSRV `cargo check`.
+`./quick-release.sh patch|minor|major` (or `just release-patch` etc.) is the only release path. It refuses to run unless the tree is clean, the branch is `main`, and `main` matches `origin/main`. It then runs the same `--locked` fmt/clippy/test/build gate as CI, bumps `Cargo.toml`, commits `chore(release): bump version to X.Y.Z`, tags `vX.Y.Z`, and pushes. The tag triggers `.github/workflows/release.yml` (binaries for Linux glibc and musl, Windows, macOS x86_64 and aarch64) and `publish.yml` (crates.io, needs the `CARGO_REGISTRY_TOKEN` repository secret; the crate ships only `src/`, `shell/`, README and LICENSE through `include` in `Cargo.toml`). `ci.yml` runs on pushes to `main`, on pull requests, and on manual dispatch: fmt, clippy, tests, and a release build on Ubuntu, macOS, and Windows, plus `cargo audit` and `cargo check` on Rust 1.85. A feature branch gets CI through a pull request, not on push. Every cargo invocation in CI uses `--locked`, so commit `Cargo.lock` changes together with `Cargo.toml` changes.
 
 ## Architecture
 

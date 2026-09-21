@@ -7,10 +7,10 @@ default:
 
 # Run all checks (format, clippy, test)
 check:
-    cargo fmt --check
-    cargo clippy -- -D warnings
-    cargo test
-    cargo build --release
+    cargo fmt --all -- --check
+    cargo clippy --all-targets --all-features --locked -- -D warnings
+    cargo test --all-targets --locked
+    cargo build --release --locked
 
 # Fix formatting and clippy issues
 fix:
@@ -19,11 +19,11 @@ fix:
 
 # Run tests
 test:
-    cargo test
+    cargo test --all-targets --locked
 
 # Build release version
 build:
-    cargo build --release
+    cargo build --release --locked
 
 # Clean build artifacts
 clean:
@@ -46,7 +46,7 @@ release-major: check
 
 # Install cctx locally
 install:
-    cargo install --path .
+    cargo install --path . --locked
 
 # Publish to crates.io only (no version bump)
 publish:

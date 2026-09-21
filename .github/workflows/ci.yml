@@ -2,87 +2,73 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    name: Test
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        rust: [stable]
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - uses: Swatinem/rust-cache@v2
 
-    - name: Cache cargo index
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Check formatting
+        run: cargo fmt --all -- --check
 
-    - name: Cache cargo build
-      uses: actions/cache@v4
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      - name: Check clippy
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
-    - name: Check formatting
-      run: cargo fmt --all -- --check
+      - name: Run tests
+        run: cargo test --all-targets --locked
 
-    - name: Check clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
-
-    - name: Run tests
-      run: cargo test --verbose
-
-    - name: Build release
-      run: cargo build --release --verbose
+      - name: Build release
+        run: cargo build --release --locked
 
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
 
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-    - name: Run cargo audit
-      run: cargo audit
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
 
   msrv:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust 1.85
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: 1.85.0
+      - uses: actions/checkout@v4
 
-    - name: Check with MSRV
-      run: cargo check --verbose
+      - name: Install Rust 1.85
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check with MSRV
+        run: cargo check --locked

@@ -92,9 +92,9 @@ log "Running quality checks..."
 
 # Run all quality checks
 cargo fmt --all -- --check || error "Code formatting check failed"
-cargo clippy -- -D warnings || error "Clippy check failed"
-cargo test || error "Tests failed"
-cargo build --release || error "Release build failed"
+cargo clippy --all-targets --all-features --locked -- -D warnings || error "Clippy check failed"
+cargo test --all-targets --locked || error "Tests failed"
+cargo build --release --locked || error "Release build failed"
 
 success "All quality checks passed!"
 
@@ -111,11 +111,7 @@ log "Committing version bump..."
 
 # Commit the version change
 git add Cargo.toml Cargo.lock
-git commit -m "Bump version to $new_version
-
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
+git commit -m "chore(release): bump version to $new_version"
 
 log "Creating and pushing git tag..."
 
